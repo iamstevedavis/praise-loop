@@ -10,7 +10,7 @@ async function main() {
     await client.query("INSERT INTO auth_users(id,email) VALUES('synthetic-http-owner','http@example.invalid')");
     await client.query("INSERT INTO auth_sessions VALUES($1,'synthetic-http-owner',now()+interval '1 hour')", [sessionHash("synthetic-http-session")]);
     const server = spawn(process.execPath,["node_modules/next/dist/bin/next","start","-p",String(port)], {
-      env: { ...process.env, NEXTAUTH_URL: base, NEXTAUTH_SECRET: "synthetic-test-only-secret-not-a-live-key", GITHUB_CLIENT_ID: "synthetic", GITHUB_CLIENT_SECRET: "synthetic" }, stdio: "ignore" });
+      env: { ...process.env, NEXTAUTH_URL: base, NEXTAUTH_SECRET: "synthetic-test-only-secret-not-a-live-key", GOOGLE_CLIENT_ID: "synthetic", GOOGLE_CLIENT_SECRET: "synthetic" }, stdio: "ignore" });
     try {
       let ready = false;
       for (let i = 0; i < 100; i++) { try { if ((await fetch(base)).ok) { ready = true; break; } } catch {} await setTimeout(100); }

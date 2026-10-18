@@ -113,14 +113,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="pl-account">
             {status === "signed-out"
-              ? <button type="button" className="pl-btn pl-btn-dark" onClick={() => signIn("github")}>Sign in with GitHub</button>
+              ? <button type="button" className="pl-btn pl-btn-dark" onClick={() => signIn("google")}>Sign in with Google</button>
               : <button type="button" className="pl-link-button" onClick={() => signOut({ callbackUrl: "/" })}>Sign out</button>}
           </div>
         </aside>
         <header className="pl-topbar">
           {brand}
           {status === "signed-out"
-            ? <button type="button" className="pl-btn pl-btn-dark" onClick={() => signIn("github")}>Sign in</button>
+            ? <button type="button" className="pl-btn pl-btn-dark" onClick={() => signIn("google")}>Sign in</button>
             : status === "ready" ? <BusinessSwitcher id="business-switcher-phone" withActions /> : null}
         </header>
         <main className="pl-main">
@@ -129,7 +129,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <div className="pl-empty">
                 <h2>Sign in to see your posts</h2>
                 <p className="pl-muted">Your businesses, reviews and drafts are private to your account.</p>
-                <button type="button" className="pl-btn pl-btn-primary pl-btn-lg" onClick={() => signIn("github")}>Sign in with GitHub</button>
+                <button type="button" className="pl-btn pl-btn-primary pl-btn-lg" onClick={() => signIn("google")}>Sign in with Google</button>
               </div>
             ) : status === "error" ? (
               <div className="pl-empty">
