@@ -84,7 +84,7 @@ export default function Onboarding() {
         <main className={styles.body}>
           <h1 className={styles.title}>Sign in to set up your business</h1>
           <p className="pl-muted">Your progress is saved to your account, so you can pick up where you left off.</p>
-          <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("github", { callbackUrl: "/onboarding" })}>Continue with GitHub</button>
+          <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("google", { callbackUrl: "/onboarding" })}>Continue with Google</button>
         </main>
       </div>
     );

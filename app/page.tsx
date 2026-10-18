@@ -31,8 +31,8 @@ export default function HomePage() {
           <h1 className={styles.headline}>Your happy customers are your best marketing.</h1>
           <p className={styles.lede}>PraiseLoop turns your best reviews into on-brand social posts every week. You spend five minutes approving them. That’s it.</p>
           <div className={styles.cta}>
-            <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("github", { callbackUrl: "/approval" })} disabled={status === "loading" || status === "ready"}>
-              Continue with GitHub
+            <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("google", { callbackUrl: "/approval" })} disabled={status === "loading" || status === "ready"}>
+              Continue with Google
             </button>
             <span className="pl-muted pl-small">Nothing posts without your OK.</span>
           </div>

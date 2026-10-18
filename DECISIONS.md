@@ -73,7 +73,7 @@ Decision log to capture architecture/product calls and why they were made.
   Why: Concurrent imports need a unique constraint, not check-then-insert. Normalize NFKC/case/whitespace and UTC milliseconds only for identity; retain original wording. Keep duplicate rows and their draft references under legacy keys, excluding them from new selection. Stable source IDs take precedence over imperfect manual fingerprints.
 
 - Date: 2026-10-15
-  Decision: NextAuth GitHub login with revocable database sessions and explicit legacy claims (#42).
+  Decision: NextAuth GitHub login with revocable database sessions and explicit legacy claims (#42). Superseded by the 2026-10-18 Google sign-in decision below; sessions/claims unchanged.
   Why: A maintained OAuth implementation handles sign-in/CSRF cookies. The minimal adapter stores no provider tokens and hashes session tokens. Shared server guards authorize every API family; DB counters persist generation limits. Media moves outside public with legacy URL denial. No password database, team roles or production provider setup.
 
 - Date: 2026-10-15
@@ -91,3 +91,7 @@ Decision log to capture architecture/product calls and why they were made.
 - Date: 2026-10-15
   Decision: Keep Google sync #46 blocked at its access/reuse-policy feasibility gate.
   Why: Dated official prerequisites, OAuth/review contracts and policy references are captured in GOOGLE.md. No approved project or permitted live location is configured, and temporary storage/manipulation rules need clarification for social reuse before adding a connector. Owner approval cannot substitute for provider access or policy resolution; no scraping/mock success.
+
+- Date: 2026-10-18
+  Decision: Use Google instead of GitHub as the owner OAuth provider (#76).
+  Why: Pilot customers are small-business owners who rarely have GitHub accounts but usually have Google, often the account behind their Business Profile. Only openid/email/profile are requested, so no sensitive-scope verification is needed. Adapter, hashed database sessions, token discarding and ownership guards are unchanged. No GitHub app or real owners existed, so no account migration.

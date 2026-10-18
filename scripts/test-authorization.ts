@@ -25,9 +25,9 @@ async function main() {
     const expiry = new Date(Date.now() + 3600000);
     await authAdapter.createSession!({ userId: a.id, sessionToken: "synthetic-session-a", expires: expiry });
     assert.equal((await client.query("SELECT token_hash FROM auth_sessions")).rows[0].token_hash, sessionHash("synthetic-session-a"));
-    await authAdapter.linkAccount!({ userId: a.id, type: "oauth", provider: "github", providerAccountId: "synthetic-github-id", access_token: "MUST_NOT_STORE", refresh_token: "MUST_NOT_STORE" });
+    await authAdapter.linkAccount!({ userId: a.id, type: "oauth", provider: "google", providerAccountId: "synthetic-google-sub", access_token: "MUST_NOT_STORE", refresh_token: "MUST_NOT_STORE" });
     assert.doesNotMatch(JSON.stringify((await client.query("SELECT * FROM auth_accounts")).rows), /MUST_NOT_STORE/);
-    assert.equal((await authAdapter.getUserByAccount!({ provider: "github", providerAccountId: "synthetic-github-id" }))?.id, a.id);
+    assert.equal((await authAdapter.getUserByAccount!({ provider: "google", providerAccountId: "synthetic-google-sub" }))?.id, a.id);
     const businesses = await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic A','UTC',$1),('Synthetic B','UTC',$2),('Unclaimed synthetic','UTC',NULL) RETURNING id", [a.id,b.id]);
     const [ba,bb,legacy] = businesses.rows.map(r => r.id);
     const reviews = await client.query("INSERT INTO reviews(business_id,source,rating,text,reviewed_at) VALUES($1,'manual',5,'A synthetic review','2026-10-01'),($2,'manual',5,'B synthetic review','2026-10-01') RETURNING id", [ba,bb]);
