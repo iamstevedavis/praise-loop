@@ -1,4 +1,4 @@
-# WORKFLOW.md
+# Contributing
 
 ## Team rules
 

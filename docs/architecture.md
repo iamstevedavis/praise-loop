@@ -1,4 +1,4 @@
-# ARCHITECTURE.md
+# Architecture
 
 ## Tech stack
 
@@ -12,6 +12,7 @@ Define and maintain the core stack in this section as the source of truth:
 
 - Next.js (app + API routes) for web UI + API surface
 - Worker process for background jobs (separate entrypoint)
+- Expo (React Native, TypeScript) for the owner's iOS/Android app in `mobile/`, a separate package that talks only to our API ([mobile-first plan](mobile-plan.md))
 
 ### Data store(s)
 
@@ -21,7 +22,7 @@ Define and maintain the core stack in this section as the source of truth:
 
 ### Infrastructure / deployment model
 
-- Docker Compose on VPS for MVP:
+- Docker Compose for MVP: the pilot runs on a home server behind a Cloudflare Tunnel, then a small VPS ([hosting](mobile-plan.md#hosting)):
   - web: Next.js
   - worker: background jobs
   - postgres
@@ -54,6 +55,7 @@ Define and maintain the core stack in this section as the source of truth:
 ### State machine (draft lifecycle)
 
 - ImportedReview → CandidateQuote → DraftPost → Approved → Scheduled → Published (best-effort)
+- Planned for the share-sheet flow: Approved → Shared (owner-reported; never shown as a verified Published)
 - Every transition is stored with timestamps for audit/debugging
 
 ### Error handling and observability
@@ -74,18 +76,20 @@ Define and maintain the core stack in this section as the source of truth:
 
 ```text
 .
-├─ PRODUCT.md / ARCHITECTURE.md / DECISIONS.md / WORKFLOW.md
+├─ README.md / CONTRIBUTING.md
+├─ docs/           # product, architecture, decisions, plans, feature and ops docs
 ├─ app/            # Next.js app (UI pages + API routes)
 ├─ lib/            # shared domain logic (db, services, integrations)
 ├─ worker/         # durable generation worker entrypoint
 ├─ scripts/        # migrations, db health, scheduling sweep, test suites
 ├─ db/migrations/  # SQL migrations
+├─ mobile/         # Expo app (planned)
 └─ Dockerfile.web / Dockerfile.worker / Dockerfile.dev / docker-compose*.yml
 ```
 
 ## Don’t do X
 
-- Don’t add new frameworks without a documented decision (`DECISIONS.md`)
+- Don’t add new frameworks without a documented decision (`docs/decisions.md`)
 - Don’t let UI talk directly to external APIs (go through our API)
 - Don’t embed secrets/tokens in logs
 - Don’t auto-post without an explicit approval step (MVP)

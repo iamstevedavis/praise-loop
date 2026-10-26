@@ -1,4 +1,4 @@
-# DECISIONS.md
+# Decisions
 
 Decision log to capture architecture/product calls and why they were made.
 
@@ -86,12 +86,28 @@ Decision log to capture architecture/product calls and why they were made.
 
 - Date: 2026-10-15
   Decision: Keep #29 blocked until owner Buffer access and a permitted live test are available.
-  Why: Official GraphQL/OAuth-PKCE, scheduling/media and rate-limit interfaces are documented in SCHEDULER.md with dated references. No configured account/channel, encryption key or public media origin is available. Retire false stub success and content logging; no alternative provider, scraping or unverified live success is substituted.
+  Why: Official GraphQL/OAuth-PKCE, scheduling/media and rate-limit interfaces are documented in integrations.md with dated references. No configured account/channel, encryption key or public media origin is available. Retire false stub success and content logging; no alternative provider, scraping or unverified live success is substituted.
 
 - Date: 2026-10-15
   Decision: Keep Google sync #46 blocked at its access/reuse-policy feasibility gate.
-  Why: Dated official prerequisites, OAuth/review contracts and policy references are captured in GOOGLE.md. No approved project or permitted live location is configured, and temporary storage/manipulation rules need clarification for social reuse before adding a connector. Owner approval cannot substitute for provider access or policy resolution; no scraping/mock success.
+  Why: Dated official prerequisites, OAuth/review contracts and policy references are captured in integrations.md. No approved project or permitted live location is configured, and temporary storage/manipulation rules need clarification for social reuse before adding a connector. Owner approval cannot substitute for provider access or policy resolution; no scraping/mock success.
 
 - Date: 2026-10-18
   Decision: Use Google instead of GitHub as the owner OAuth provider (#76).
   Why: Pilot customers are small-business owners who rarely have GitHub accounts but usually have Google, often the account behind their Business Profile. Only openid/email/profile are requested, so no sensitive-scope verification is needed. Adapter, hashed database sessions, token discarding and ownership guards are unchanged. No GitHub app or real owners existed, so no account migration.
+
+- Date: 2026-10-26
+  Decision: Go mobile-first: an Expo app for owners on top of the existing server (#79, docs/mobile-plan.md)
+  Why: Owners approve on their phones, not laptops, and a push notification is what brings them back weekly. Keeping the Next.js/Postgres/worker server avoids a rewrite; the app is a thin client over the same API and ownership guard. Expo gives one TypeScript codebase for iOS and Android. The app lives in `mobile/` as a separate package so web dependencies and builds are unaffected.
+
+- Date: 2026-10-26
+  Decision: Share sheet first; scheduler integration (#29) becomes a later paid feature (#79)
+  Why: #29 is blocked on provider access, credentials and public media. The phone's share sheet lets the owner post the approved image and caption now, with media kept private. A new `shared` status records owner-reported posting and is never presented as verified publication. Approval stays required.
+
+- Date: 2026-10-26
+  Decision: Start hosting on the home server behind a Cloudflare Tunnel; move to a small VPS for paying customers (#79)
+  Why: The pilot should cost about $0. The same Docker Compose stack runs in both places, and the app uses one HTTPS URL, so moving is a DNS change. Backups off the machine are required in both stages.
+
+- Date: 2026-10-26
+  Decision: Monetize through server-enforced plans (free/pro) unlocked by app-store subscriptions (#79)
+  Why: AI captions, review sync, AI review replies and more posts per week are worth paying for, while CSV import and one weekly post keep a free tier. Entitlements live on the server so the app can't unlock features itself. The billing provider (for example RevenueCat) is chosen and stubbed in its own issue, as CONTRIBUTING.md requires.
