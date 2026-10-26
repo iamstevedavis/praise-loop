@@ -1,4 +1,4 @@
-# PRODUCT.md
+# Product
 
 ## What you're building
 
@@ -7,7 +7,7 @@ A SaaS tool for restaurants and local businesses that turns existing customer re
 - Selects the best review quotes
 - Generates captions in the business’ brand voice
 - Produces branded graphics (logo/colors/fonts)
-- Queues and schedules posts to social channels (via a scheduler integration first, direct publishing later)
+- Delivers each week's approved posts to the owner's phone, ready to share to social channels (share sheet first; scheduler integration later)
 
 ## Who it's for
 
@@ -31,13 +31,13 @@ MVP focuses on a tight loop:
 2. Extract & rank candidate quotes
 3. Generate 3–5 post drafts per week per business
 4. Render branded graphics from templates
-5. Approval queue + schedule via a scheduler integration (e.g., Buffer)
+5. Approval queue on the phone, with a push notification when drafts are ready, and posting through the share sheet ([mobile-first plan](mobile-plan.md))
 
 ## What "done" looks like (MVP success)
 
 - A business can connect/import reviews in under 5 minutes
 - The system generates quality drafts with minimal edits needed
-- The business can approve and schedule a week of content in <15 minutes
+- The business can approve and post a week of content from their phone in under 5 minutes
 - Posts are consistently branded (logo/colors/fonts)
 - Basic audit trail exists (what review became what post, when it was scheduled)
 

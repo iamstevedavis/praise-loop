@@ -5,7 +5,7 @@ export type SchedulePayload = {
 export type ScheduleReceipt = { provider: "buffer" | "fake"; confirmed: boolean; externalId?: string; status: "scheduled" | "simulated" };
 export interface SchedulerAdapter { schedulePost(payload: SchedulePayload): Promise<ScheduleReceipt>; }
 export class SchedulerUnavailable extends Error {
-  constructor() { super("Buffer integration is not configured/verified; see SCHEDULER.md. No post was submitted."); }
+  constructor() { super("Buffer integration is not configured/verified; see docs/integrations.md. No post was submitted."); }
 }
 // Explicit local/test fake. Never returns a real scheduled/published receipt or logs content.
 export class StubSchedulerAdapter implements SchedulerAdapter {

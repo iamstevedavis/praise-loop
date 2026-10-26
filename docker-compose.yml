@@ -1,6 +1,6 @@
 # Production-style stack: multi-stage builds, npm ci, healthchecks,
 # bounded shutdown. For local development with hot reload, use
-# docker-compose.dev.yml as an override (see README).
+# docker-compose.dev.yml as an override (see docs/development.md).
 services:
   migrate:
     build:

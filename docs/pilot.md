@@ -6,7 +6,7 @@ This preparation PR must not close #47. Owner records outcomes or stops the expe
 
 ## Owner decisions and recruitment
 
-Choose ONE segment from PRODUCT.md, a price/currency, a two-week observation period,
+Choose one segment from [product.md](product.md), a price/currency, a two-week observation period,
 and three consenting businesses in that segment. Record these choices privately.
 Owner alone contacts prospects, obtains consent, operates the pilot and invoices.
 Do not send outreach, deploy, create accounts, or charge automatically.
