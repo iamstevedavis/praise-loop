@@ -52,6 +52,18 @@ Define and maintain the core stack in this section as the source of truth:
 - Worker consumes jobs and writes results back to Postgres
 - Rendering is deterministic from (template + brand + quote + caption)
 
+### API compatibility for the mobile app
+
+- Installed apps cannot be upgraded on demand. API changes the app uses must be
+  additive; a breaking change needs a new route and an old one kept until the
+  minimum supported version moves past it.
+- `GET /api/mobile/config` is public and owner-free. It returns
+  `minimumVersion`, `latestVersion` and `features` from `MOBILE_MINIMUM_VERSION`,
+  `MOBILE_LATEST_VERSION` and comma-separated `MOBILE_FEATURES` (defaults:
+  `1.0.0`, `1.0.0`, none). Below `minimumVersion` the app shows an update screen.
+  The response is cacheable for a short time and carries no cookies. It is the
+  only unauthenticated route besides NextAuth's handlers.
+
 ### State machine (draft lifecycle)
 
 - ImportedReview → CandidateQuote → DraftPost → Approved → Scheduled → Published (best-effort)
