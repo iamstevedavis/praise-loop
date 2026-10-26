@@ -100,5 +100,41 @@ skip honestly and exits 0, so CI stays green without credentials.
 ## Production deployment notes
 
 - `docker compose up --build` is the production-style path: multi-stage builds, deterministic `npm ci`, healthchecks, bounded shutdown (`stop_grace_period`), shared media volume, loopback-only database/Redis ports.
+- Prefer the published images for a server: every merge to master and every `v*` tag builds `ghcr.io/iamstevedavis/praise-loop-web` and `ghcr.io/iamstevedavis/praise-loop-worker` after CI passes. See [Published images](#published-images).
 - Restart safety: database and generated media live in named volumes (`postgres_data`, `generated_media`); container restarts preserve them.
 - Image delivery: the worker writes PNGs into the shared `generated_media` volume; the web container serves them via `GET /api/media/<filename>` (see `app/api/media/[name]/route.ts`). Browsers should always use the `/api/media/...` URL stored in `draft_posts.image_path` — never a bare `public/generated/...` path, because runtime-written files under `public/` are not guaranteed to be served by the Next production server.
+
+### Published images
+
+The `images` job in `.github/workflows/ci.yml` builds both images on every PR with
+`push: false`, so a broken Dockerfile fails review. On master it pushes after
+`verify` passes; version tags also get semver tags. Images are `linux/amd64` only
+(see [decisions](decisions.md)).
+
+```bash
+# First run on a server with the repo checked out (pulls instead of building):
+docker compose pull
+docker compose up -d
+
+# Pin the exact build that CI produced (short sha tag):
+PRAISELOOP_TAG=sha-abc1234 docker compose pull
+PRAISELOOP_TAG=sha-abc1234 docker compose up -d
+
+# Roll back: pick an earlier sha- tag and repeat. Migrations are forward-only,
+# so restore the matching database backup if the release included a migration.
+PRAISELOOP_TAG=sha-def5678 docker compose up -d
+```
+
+`docker-compose.yml` keeps `build:` so local and dev builds still work; Compose
+uses the `image:` when it is present. `migrate`, `web` and `worker` use the
+published web/worker images (migrate runs the worker image).
+
+GHCR packages are private by default. Log the server in once if pulls return
+`denied`; use a token with `read:packages` (a classic PAT is simplest):
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
+```
+
+Making the packages public avoids that step, but only do it if images can never
+contain secrets — configuration is supplied from the environment at runtime.

@@ -3,6 +3,7 @@
 # docker-compose.dev.yml as an override (see docs/development.md).
 services:
   migrate:
+    image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.worker
@@ -17,6 +18,7 @@ services:
     restart: "no"
 
   web:
+    image: ghcr.io/iamstevedavis/praise-loop-web:${PRAISELOOP_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -44,6 +46,7 @@ services:
     restart: unless-stopped
 
   worker:
+    image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.worker

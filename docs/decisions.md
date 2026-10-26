@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-10-26
+  Decision: Publish `linux/amd64` web and worker images to GHCR from CI (#102)
+  Why: The pilot server and a future VPS both run x86-64, so building and pushing a single platform keeps the pipeline fast; add `linux/arm64` only if an ARM host is planned. PRs build without pushing so Dockerfile breakage is caught in review, and master pushes only after `verify` passes using the built-in `GITHUB_TOKEN` with `packages: write`. Images contain no secrets; runtime configuration stays in the environment. Package visibility remains an owner decision before #90 goes live (private needs a `read:packages` token to pull).
+
 - Date: 2026-10-15
   Decision: Use a consented manual observation ledger and offline pilot report for #47
   Why: Current draft status/updated_at cannot reconstruct approval edits or session history. Explicit observations preserve unknown values, exclude synthetic businesses and avoid collecting review text or adding an unauthenticated report endpoint. No analytics platform or new dependency; human pilot outcomes remain unverified.
