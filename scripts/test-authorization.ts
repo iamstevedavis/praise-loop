@@ -11,13 +11,30 @@ function files(dir: string): string[] { return readdirSync(dir, { withFileTypes:
 async function main() {
   process.env.NEXTAUTH_URL = "http://localhost";
   // Exercise every actual API export anonymously, including future additions (fail closed).
-  for (const file of files("app/api").filter(f => !f.includes("/auth/"))) {
+  // The mobile config route is the one intentional public exception (#82).
+  const publicRoutes = new Set(["app/api/mobile/config/route.ts"]);
+  for (const file of files("app/api").filter(f => !f.includes("/auth/") && !publicRoutes.has(f))) {
     const route = require(join("..",file));
     const path = "/" + file.replace(/\/route.ts$/, "").replace("[id]", "999999").replace("[name]", "draft-999999.png");
     for (const method of ["GET","POST","PATCH","DELETE"].filter(m => route[m])) {
       assert.equal((await route[method](new NextRequest(`http://localhost${path}`, { method }), { params: Promise.resolve({ id: "999999", name: "draft-999999.png" }) })).status, 401, `${path} ${method}`);
     }
   }
+  const config = require("../app/api/mobile/config/route").GET;
+  const defaultConfig = await config(new NextRequest("http://localhost/api/mobile/config"));
+  assert.equal(defaultConfig.status, 200);
+  assert.equal(defaultConfig.headers.get("set-cookie"), null);
+  assert.match(defaultConfig.headers.get("cache-control") ?? "", /max-age=60/);
+  assert.deepEqual(await defaultConfig.json(), { minimumVersion: "1.0.0", latestVersion: "1.0.0", features: [] });
+  process.env.MOBILE_MINIMUM_VERSION = "1.2.0";
+  process.env.MOBILE_LATEST_VERSION = "1.4.0";
+  process.env.MOBILE_FEATURES = "queue, sharing, Not Valid,queue,";
+  assert.deepEqual(await (await config(new NextRequest("http://localhost/api/mobile/config"))).json(), { minimumVersion: "1.2.0", latestVersion: "1.4.0", features: ["queue", "sharing"] });
+  delete process.env.MOBILE_LATEST_VERSION;
+  delete process.env.MOBILE_FEATURES;
+  process.env.MOBILE_MINIMUM_VERSION = "not-a-version";
+  assert.deepEqual(await (await config(new NextRequest("http://localhost/api/mobile/config"))).json(), { minimumVersion: "1.0.0", latestVersion: "1.0.0", features: [] });
+  delete process.env.MOBILE_MINIMUM_VERSION;
   await databaseFixture(async client => {
     const create = authAdapter.createUser as (u: Omit<AdapterUser,"id">) => Promise<AdapterUser>;
     const a = await create({ name: "Synthetic A", email: "a@example.invalid", emailVerified: null });
