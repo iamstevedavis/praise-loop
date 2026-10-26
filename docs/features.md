@@ -188,6 +188,9 @@ job retries. Every draft mutation requires its current `version`; refresh on 409
 Approval requires nonempty caption and a decoded, available 1080px PNG. Edits and
 regeneration clear approval; scheduled/published items require provider operations.
 Migration 009 adds archived status, revisions and append-only actor/time/reason events.
+Migration 012 adds owner-reported `shared` (only from `approved`, with `shared_at`
+and an `owner_shared` audit event). It is shown as "Shared by you", never as a
+verified publication, and is read-only; undo back to approved is a follow-up.
 Generated PNGs now use immutable content hashes; historical images remain compatible.
 After building, run `TEST_BROWSER=1 TEST_DATABASE_URL=... npx ts-node scripts/test-approval-browser.ts`
 with Chromium installed (`CHROMIUM_PATH` defaults to /usr/bin/chromium). Uses synthetic
