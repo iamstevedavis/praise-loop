@@ -192,7 +192,8 @@ local builds also work.
 ## Delivery phases
 
 Each phase ends with something an owner can use. Issues follow the
-[contributing rules](../CONTRIBUTING.md): one PR per issue, about 500 lines or less.
+[contributing rules](../CONTRIBUTING.md): one PR per issue. Phases group the work
+by theme; [Order of work](#order-of-work) says what has to wait for what.
 
 ### Phase 0: groundwork
 
@@ -237,6 +238,65 @@ Each phase ends with something an owner can use. Issues follow the
 - #98 Move production to a VPS
 - #29 Scheduler integration, as an optional Pro feature for automatic posting
 - Setup screens in the app, if the pilot shows owners want them
+
+## Order of work
+
+Only the arrows below are real dependencies. Anything not waiting on an arrow can
+be worked on in parallel.
+
+```mermaid
+flowchart LR
+  subgraph owner["Owner tasks: start now"]
+    O78["#78 Google OAuth"]
+    O91["#91 Store accounts"]
+    GBP["Business Profile API application"]
+  end
+  B80["#80 Bearer sessions"] --> G81["#81 Google sign-in exchange"]
+  S84["#84 Expo app + CI"] --> A85["#85 App sign-in"]
+  G81 --> A85
+  O78 --> G81
+  A85 --> Q86["#86 Approval queue"]
+  B80 --> Q86
+  Q86 --> SH87["#87 Share sheet"]
+  ST83["#83 shared status"] --> SH87
+  B80 --> P88["#88 Push (server)"]
+  P88 --> P89["#89 Push (app)"]
+  Q86 --> P89
+  B80 --> D93["#93 Account deletion"]
+  P88 --> D93
+  G81 --> AP92["#92 Sign in with Apple"]
+  O91 --> AP92
+  V82["#82 Version gate"] -.->|"can be stubbed"| S84
+  E94["#94 Entitlements"] --> SUB95["#95 Subscriptions"]
+  O91 --> SUB95
+  GBP --> R46["#46 Review sync"]
+  R46 --> RE96["#96 AI review replies"]
+  E94 --> RE96
+  Q86 --> RE96
+  E94 --> BV97["#97 Brand voice"]
+  H90["#90 Home hosting"] --> VPS98["#98 VPS"]
+```
+
+### Waves
+
+| Wave | Work (everything in a wave can run in parallel) | Waits for |
+|---|---|---|
+| **Now** | #101 fix the date-dependent test that breaks CI (first) · #80 bearer sessions · #82 version gate · #83 `shared` status · #84 Expo app · #90 home hosting · #94 entitlements | Nothing |
+| **Now (owner)** | #78 Google OAuth · #91 store accounts · Business Profile API application (steps in #91) | Nothing; these have the longest waits, so start them first |
+| **2** | #81 Google sign-in exchange · #88 push (server) | #80 (and #78 for a live #81 test) |
+| **3** | #85 app sign-in | #81, #84 |
+| **4** | #86 approval queue | #85 |
+| **5** | #87 share sheet · #89 push (app) · #93 account deletion | #86, #83, #88 |
+| **Pilot** | First businesses on TestFlight and Play internal testing | Waves 1–5 and #90 |
+| **Before public release** | #92 Sign in with Apple; for a personal Play account, a 14-day closed test with at least 12 testers | #81, #91; the closed test can start as soon as wave 4 produces a build |
+| **Revenue** | #95 subscriptions · #97 brand voice | #94, and #91 for store products |
+| **When Google approves** | #46 review sync, then #96 AI review replies | Business Profile API approval; #94 and #86 for #96 |
+| **Later** | #98 VPS · #29 scheduler | #90 for #98; demand for #29 |
+
+The critical path to the pilot is **#80 → #81 → #85 → #86 → #87**. The waits
+outside the code are just as long: Apple organization enrolment (a D-U-N-S number
+takes up to a week), the Play closed test (14 days) and Google's API review
+(weeks). That's why the owner tasks belong in the first wave.
 
 ## Risks and open questions
 
