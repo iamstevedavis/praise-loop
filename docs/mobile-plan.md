@@ -219,6 +219,7 @@ by theme; [Order of work](#order-of-work) says what has to wait for what.
 ### Phase 3: pilot
 
 - #90 Home-server hosting through Cloudflare Tunnel, with backups
+- #102 Build and push the web and worker images to GitHub Container Registry
 - #91 App Store and Google Play accounts, privacy policy, test builds (owner)
 - #92 Sign in with Apple, before public App Store release
 - #93 Account deletion
@@ -275,13 +276,14 @@ flowchart LR
   Q86 --> RE96
   E94 --> BV97["#97 Brand voice"]
   H90["#90 Home hosting"] --> VPS98["#98 VPS"]
+  CI102["#102 Images to GHCR"] -.->|"servers pull images"| H90
 ```
 
 ### Waves
 
 | Wave | Work (everything in a wave can run in parallel) | Waits for |
 |---|---|---|
-| **Now** | #101 fix the date-dependent test that breaks CI (first) · #80 bearer sessions · #82 version gate · #83 `shared` status · #84 Expo app · #90 home hosting · #94 entitlements | Nothing |
+| **Now** | #101 CI test fix (in #100) · #102 images to GHCR · #80 bearer sessions · #82 version gate · #83 `shared` status · #84 Expo app · #90 home hosting · #94 entitlements | Nothing |
 | **Now (owner)** | #78 Google OAuth · #91 store accounts · Business Profile API application (steps in #91) | Nothing; these have the longest waits, so start them first |
 | **2** | #81 Google sign-in exchange · #88 push (server) | #80 (and #78 for a live #81 test) |
 | **3** | #85 app sign-in | #81, #84 |
