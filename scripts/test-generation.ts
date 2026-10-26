@@ -13,8 +13,10 @@ async function main() {
   await databaseFixture(async client=>{
     await client.query("INSERT INTO auth_users(id,email) VALUES('generation-owner','generation@example.invalid')");
     const bid = (await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic generation','America/New_York','generation-owner') RETURNING id")).rows[0].id;
-    await client.query("INSERT INTO reviews(business_id,source,source_review_id,rating,text,reviewed_at) SELECT $1,'manual',n::text,5,'A wonderful synthetic experience with friendly staff '||n, '2026-10-01' FROM generate_series(1,20) n",[bid]);
-    let now = new Date("2026-10-18T12:00:00Z"), captions=0, renders=0, failCaption=true, failRender=true;
+    await client.query("INSERT INTO reviews(business_id,source,source_review_id,rating,text,reviewed_at) SELECT $1,'manual',n::text,5,'A wonderful synthetic experience with friendly staff '||n, '2020-07-01' FROM generate_series(1,20) n",[bid]);
+    // Simulated weeks stay in the past: draft_posts.created_at uses the real DB clock and periods count
+    // drafts created in them against quota, so a simulated week matching the real one double-counts.
+    let now = new Date("2020-07-12T12:00:00Z"), captions=0, renders=0, failCaption=true, failRender=true;
     const deps: GenerationDeps = {clock:()=>now,captions:async()=>{captions++;if(failCaption)throw new Error("private prompt must never persist");return {friendly:"Synthetic caption",premium:"Synthetic premium",playful:"Synthetic playful"};},render:async()=>{renders++;if(failRender)throw new Error("private render data");return {publicPath:"/api/media/synthetic.png",fileSystemPath:"/tmp/synthetic.png"};}};
     const requests = await Promise.all([requestGeneration(bid,5,now),requestGeneration(bid,5,now)]);
     assert.equal(requests.reduce((n,r)=>n+r.inserted,0),3);
@@ -46,11 +48,11 @@ async function main() {
     await client.query("UPDATE generation_jobs SET state='failed' WHERE id=$1",[third]);
     await client.query("UPDATE draft_posts SET status='failed' WHERE id=$1",[jobs[2].draft_id]);
     assert.equal(await retryGeneration(Number(jobs[2].draft_id)),false,"manual retries are bounded");
-    now=new Date("2026-10-19T04:00:00Z");
+    now=new Date("2020-07-13T04:00:00Z");
     assert.equal((await requestGeneration(bid,5,now)).inserted,3,"new business-local week rolls quota");
     assert.equal((await requestGeneration(bid,5,now)).inserted,0);
     assert.equal((await client.query("SELECT count(*) n FROM draft_posts WHERE business_id=$1",[bid])).rows[0].n,"6");
-    const following = new Date("2026-10-26T04:00:00Z");
+    const following = new Date("2020-07-20T04:00:00Z");
     assert.equal((await requestGeneration(bid,5,following)).inserted,2);
     assert.equal((await requestGeneration(bid,5,following)).reason,"backlog_full");
     await assert.rejects(client.query("UPDATE businesses SET weekly_target=6 WHERE id=$1",[bid]));
