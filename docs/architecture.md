@@ -55,7 +55,7 @@ Define and maintain the core stack in this section as the source of truth:
 ### State machine (draft lifecycle)
 
 - ImportedReview → CandidateQuote → DraftPost → Approved → Scheduled → Published (best-effort)
-- Planned for the share-sheet flow: Approved → Shared (owner-reported; never shown as a verified Published)
+- Owner-reported sharing: Approved → Shared (#83). `shared` is never shown as a verified Published; it records `shared_at` and an `owner_shared` audit event, and is read-only afterwards (undo is a follow-up).
 - Every transition is stored with timestamps for audit/debugging
 
 ### Error handling and observability

@@ -12,14 +12,16 @@ export type Draft = {
   image_path: string | null;
   status: string;
   scheduled_for?: string | null;
+  shared_at?: string | null;
   created_at: string;
 };
 
-export type Stage = "making" | "failed" | "ready" | "approved" | "scheduled" | "archived";
+export type Stage = "making" | "failed" | "ready" | "approved" | "scheduled" | "shared" | "archived";
 export type Action = (path: string, draft: Draft, extra?: Record<string, unknown>) => Promise<boolean>;
 
 export function stageOf(draft: Draft): Stage {
   if (draft.status === "archived") return "archived";
+  if (draft.status === "shared") return "shared";
   if (["scheduled", "published"].includes(draft.status)) return "scheduled";
   if (["pending", "running", "retry"].includes(draft.job_state ?? "")) return "making";
   if (draft.status === "failed" || draft.job_state === "failed") return "failed";
@@ -33,6 +35,7 @@ const badges: Record<Stage, [string, string]> = {
   ready: ["pl-badge-ready", "Ready for review"],
   approved: ["pl-badge-approved", "Approved"],
   scheduled: ["pl-badge-scheduled", "Scheduled"],
+  shared: ["pl-badge-approved", "Shared by you"],
   archived: ["pl-badge-archived", "Skipped"]
 };
 
@@ -101,7 +104,7 @@ export default function PostCard({ draft, run, busy }: { draft: Draft; run: Acti
             <span className="pl-muted pl-small">Caption</span>
             <textarea className="pl-textarea" rows={4} maxLength={200} aria-label={`Caption for draft ${draft.id}`} value={caption} onChange={e => setCaption(e.target.value)} />
           </label>
-        ) : ["approved", "scheduled"].includes(stage) ? <p className="pl-caption-text">{draft.caption_text}</p> : null}
+        ) : ["approved", "scheduled", "shared"].includes(stage) ? <p className="pl-caption-text">{draft.caption_text}</p> : null}
 
         {stage !== "making" ? (
           <details className="pl-review">

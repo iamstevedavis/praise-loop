@@ -61,6 +61,29 @@ async function main(){
       const history=(await c.query("SELECT * FROM draft_events WHERE draft_id=$1 ORDER BY id",[a])).rows;
       assert.ok(history.length>=6);assert.ok(history.every(r=>r.actor_id==="lifecycle-owner"));
       assert.equal(history.at(-1).to_status,"archived");
+
+      // Owner-reported sharing from the phone (#83). Only approved drafts may be shared.
+      const share=await draft();
+      assert.equal((await post("drafts/status",{draftPostId:share,status:"shared",version:0})).status,400);
+      const shareApproved=await (await post("drafts/status",{draftPostId:share,status:"approved",version:0})).json();
+      const staleShare=await draft();
+      assert.equal((await post("drafts/status",{draftPostId:staleShare,status:"approved",version:0})).status,200);
+      assert.equal((await post("drafts/status",{draftPostId:staleShare,status:"shared",version:0})).status,409);
+      const sharedResponse=await post("drafts/status",{draftPostId:share,status:"shared",version:shareApproved.draft.version});
+      assert.equal(sharedResponse.status,200);
+      const shared=(await sharedResponse.json()).draft;
+      assert.equal(shared.status,"shared");
+      assert.ok(shared.shared_at);
+      const sharedEvent=(await c.query("SELECT actor_id,reason,from_status,to_status FROM draft_events WHERE draft_id=$1 ORDER BY id DESC LIMIT 1",[share])).rows[0];
+      assert.deepEqual(sharedEvent,{actor_id:"lifecycle-owner",reason:"owner_shared",from_status:"approved",to_status:"shared"});
+      assert.equal((await post("drafts/status",{draftPostId:share,status:"shared",version:shared.version})).status,409);
+      assert.equal((await post("drafts/status",{draftPostId:share,status:"approved",version:shared.version})).status,409);
+      assert.equal((await post("drafts/caption",{draftPostId:share,captionText:"Edited after sharing",version:shared.version})).status,409);
+      assert.equal((await post("drafts/status",{draftPostId:empty,status:"shared",version:0})).status,400);
+      assert.equal((await post("drafts/status",{draftPostId:scheduled,status:"shared",version:0})).status,409);
+      const archivedVersion=(await c.query("SELECT version FROM draft_posts WHERE id=$1",[a])).rows[0].version;
+      assert.equal((await post("drafts/status",{draftPostId:a,status:"shared",version:archivedVersion})).status,409);
+      assert.equal((await post("drafts/status",{draftPostId:other,status:"shared",version:0})).status,404);
     });
     console.log("lifecycle completeness/transitions/concurrency/bulk/regeneration/audit tests passed");
   }finally{rmSync(root,{recursive:true,force:true});}

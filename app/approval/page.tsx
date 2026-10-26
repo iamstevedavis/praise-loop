@@ -39,7 +39,7 @@ export default function ThisWeekPage() {
   }, [businessId, load]);
 
   const groups = useMemo(() => {
-    const by: Record<Stage, Draft[]> = { making: [], failed: [], ready: [], approved: [], scheduled: [], archived: [] };
+    const by: Record<Stage, Draft[]> = { making: [], failed: [], ready: [], approved: [], scheduled: [], shared: [], archived: [] };
     for (const d of drafts ?? []) by[stageOf(d)].push(d);
     return by;
   }, [drafts]);
@@ -134,7 +134,7 @@ export default function ThisWeekPage() {
         <section aria-label="Posts for this week" className="pl-grid">
           {active.map(d => <PostCard key={d.id} draft={d} run={run} busy={busy} />)}
         </section>
-      ) : !groups.scheduled.length ? (
+      ) : !groups.scheduled.length && !groups.shared.length ? (
         <div className="pl-empty">
           <h2>Your next posts start with reviews</h2>
           <p className="pl-muted">We make new posts from your reviews each week. Add more reviews to keep them coming.</p>
@@ -143,7 +143,7 @@ export default function ThisWeekPage() {
       ) : (
         <div className="pl-empty done">
           <h2>You’re all caught up</h2>
-          <p>Everything is approved or scheduled. New posts arrive next week.</p>
+          <p>Everything is approved, scheduled or shared. New posts arrive next week.</p>
         </div>
       )}
 
@@ -151,6 +151,13 @@ export default function ThisWeekPage() {
         <section aria-labelledby="scheduled-h" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <h2 id="scheduled-h" className="pl-h2">Scheduled</h2>
           <div className="pl-grid">{groups.scheduled.map(d => <PostCard key={d.id} draft={d} run={run} busy={busy} />)}</div>
+        </section>
+      ) : null}
+
+      {groups.shared.length ? (
+        <section aria-labelledby="shared-h" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <h2 id="shared-h" className="pl-h2">Shared by you</h2>
+          <div className="pl-grid">{groups.shared.map(d => <PostCard key={d.id} draft={d} run={run} busy={busy} />)}</div>
         </section>
       ) : null}
 
