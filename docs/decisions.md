@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-10-26
+  Decision: Use Expo SDK 58, Expo Router and Jest/`jest-expo` for the app in `mobile/` (#84)
+  Why: One TypeScript codebase covers iOS and Android while the web dependencies and Docker build stay unchanged (`mobile` is excluded from the root tsconfig, ESLint and `.dockerignore`). Expo Router gives file-based navigation for the queue, sign-in and update screens. Jest with the Expo preset runs in CI without a device or EAS account; EAS Build is optional and local builds also work. The bundle ID/package name is a placeholder until the owner confirms it in #91.
+
 - Date: 2026-10-15
   Decision: Use a consented manual observation ledger and offline pilot report for #47
   Why: Current draft status/updated_at cannot reconstruct approval edits or session history. Explicit observations preserve unknown values, exclude synthetic businesses and avoid collecting review text or adding an unauthenticated report endpoint. No analytics platform or new dependency; human pilot outcomes remain unverified.

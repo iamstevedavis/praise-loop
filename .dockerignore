@@ -7,4 +7,5 @@ npm-debug.log
 .gitignore
 
 private-media
+mobile
 public/generated
