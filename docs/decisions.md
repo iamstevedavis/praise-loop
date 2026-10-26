@@ -24,6 +24,9 @@ Decision log to capture architecture/product calls and why they were made.
   Decision: Publish `linux/amd64` web and worker images to GHCR from CI (#102)
   Why: The pilot server and a future VPS both run x86-64, so building and pushing a single platform keeps the pipeline fast; add `linux/arm64` only if an ARM host is planned. PRs build without pushing so Dockerfile breakage is caught in review, and master pushes only after `verify` passes using the built-in `GITHUB_TOKEN` with `packages: write`. Images contain no secrets; runtime configuration stays in the environment. Package visibility remains an owner decision before #90 goes live (private needs a `read:packages` token to pull).
 
+  Decision: Use Expo SDK 58, Expo Router and Jest/`jest-expo` for the app in `mobile/` (#84)
+  Why: One TypeScript codebase covers iOS and Android while the web dependencies and Docker build stay unchanged (`mobile` is excluded from the root tsconfig, ESLint and `.dockerignore`). Expo Router gives file-based navigation for the queue, sign-in and update screens. Jest with the Expo preset runs in CI without a device or EAS account; EAS Build is optional and local builds also work. The bundle ID/package name is a placeholder until the owner confirms it in #91.
+
 - Date: 2026-10-15
   Decision: Use a consented manual observation ledger and offline pilot report for #47
   Why: Current draft status/updated_at cannot reconstruct approval edits or session history. Explicit observations preserve unknown values, exclude synthetic businesses and avoid collecting review text or adding an unauthenticated report endpoint. No analytics platform or new dependency; human pilot outcomes remain unverified.
