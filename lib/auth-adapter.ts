@@ -13,7 +13,7 @@ export const authAdapter: Adapter = {
   // Authentication requires only provider identity. Provider access/refresh tokens are discarded.
   linkAccount: async (a: AdapterAccount) => { await query("INSERT INTO auth_accounts VALUES($1,$2,$3)", [a.provider,a.providerAccountId,a.userId]); },
   unlinkAccount: async (a: AdapterAccount) => { await query("DELETE FROM auth_accounts WHERE provider=$1 AND provider_account_id=$2", [a.provider,a.providerAccountId]); },
-  createSession: async s => { await query("INSERT INTO auth_sessions VALUES($1,$2,$3)", [sessionHash(s.sessionToken),s.userId,s.expires]); return s; },
+  createSession: async s => { await query("INSERT INTO auth_sessions(token_hash,owner_id,expires,kind) VALUES($1,$2,$3,'web')", [sessionHash(s.sessionToken),s.userId,s.expires]); return s; },
   getSessionAndUser: async token => {
     const row = (await query<{ owner_id: string; expires: Date }>("SELECT owner_id,expires FROM auth_sessions WHERE token_hash=$1 AND expires>now()", [sessionHash(token)])).rows[0];
     if (!row) return null;

@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-10-26
+  Decision: Accept hashed bearer sessions for the native app alongside NextAuth cookies (#80)
+  Why: Native apps send neither cookies nor a matching Origin. `auth_sessions` gains a `kind` (`web` or `mobile`) and `created_at` so mobile sessions can slide for 30 days under a 90-day absolute cap without changing the web's eight-hour sessions. Both credentials in one request are rejected, and origin checks stay for cookie writes where CSRF applies. One guard still enforces ownership, upload size and limits for every route.
+
 - Date: 2026-10-15
   Decision: Use a consented manual observation ledger and offline pilot report for #47
   Why: Current draft status/updated_at cannot reconstruct approval edits or session history. Explicit observations preserve unknown values, exclude synthetic businesses and avoid collecting review text or adding an unauthenticated report endpoint. No analytics platform or new dependency; human pilot outcomes remain unverified.

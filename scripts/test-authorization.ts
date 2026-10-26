@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 import { databaseFixture } from "./db-fixture";
 import { authAdapter, sessionHash } from "../lib/auth-adapter";
 import { ownerId, ownerRoute, chargeGeneration } from "../lib/authorization";
+import { createMobileSession } from "../lib/mobileSessions";
 import type { AdapterUser } from "next-auth/adapters";
 function files(dir: string): string[] { return readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? files(join(dir,e.name)) : e.name === "route.ts" ? [join(dir,e.name)] : []); }
 async function main() {
@@ -85,6 +86,67 @@ async function main() {
     await authAdapter.deleteSession!("synthetic-session-a");
     assert.equal((await guarded(request("/api/businesses"))).status,401);
     assert.equal((await client.query("SELECT owner_id FROM businesses WHERE id=$1",[legacy])).rows[0].owner_id,null);
+
+    // Mobile bearer sessions (#80).
+    await client.query("UPDATE businesses SET owner_id=$1 WHERE id=$2",[b.id,bb]);
+    const mobileA = await createMobileSession(a.id), mobileB = await createMobileSession(b.id);
+    assert.equal(mobileA.token.length, 43);
+    assert.notEqual(mobileA.token, mobileB.token);
+    const storedMobile = (await client.query("SELECT token_hash,kind,expires FROM auth_sessions WHERE owner_id=$1 AND kind='mobile'", [a.id])).rows[0];
+    assert.equal(storedMobile.token_hash, sessionHash(mobileA.token));
+    assert.doesNotMatch(JSON.stringify((await client.query("SELECT * FROM auth_sessions")).rows), new RegExp(mobileA.token));
+    const bearer = (path: string, method = "GET", body?: unknown, token = mobileA.token, headers: Record<string,string> = {}) => new NextRequest(`http://localhost${path}`, {
+      method,
+      headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+    });
+    assert.equal(await ownerId(bearer("/api/businesses")), a.id);
+    const bearerBusinesses = await (await require("../app/api/businesses/route").GET(bearer("/api/businesses"))).json();
+    assert.deepEqual(bearerBusinesses.businesses.map((r: {id:string}) => r.id), [ba]);
+    for (const id of [bb,legacy]) for (const family of ["reviews","drafts"]) {
+      const handler = require(`../app/api/${family}/route`).GET;
+      assert.equal((await handler(bearer(`/api/${family}?businessId=${id}`))).status, 404);
+    }
+    const foreignBusiness = (await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic B2','UTC',$1) RETURNING id", [b.id])).rows[0].id;
+    const foreignReview = (await client.query("INSERT INTO reviews(business_id,source,rating,text,reviewed_at) VALUES($1,'manual',5,'B2 synthetic review','2026-10-01') RETURNING id", [foreignBusiness])).rows[0].id;
+    const foreignDraft = (await client.query("INSERT INTO draft_posts(business_id,review_id,quote_text,caption_text,image_path) VALUES($1,$2,'Synthetic','Synthetic','/api/media/draft-888.png') RETURNING id", [foreignBusiness,foreignReview])).rows[0].id;
+    assert.equal((await require("../app/api/drafts/status/route").POST(bearer("/api/drafts/status","POST",{draftPostId:foreignDraft,status:"approved",version:1}))).status,404);
+    const bearerGuard = ownerRoute(async () => new Response("OK"));
+    assert.equal((await bearerGuard(bearer("/api/branding/preview","POST",{}))).status,200);
+    assert.equal((await bearerGuard(bearer("/api/branding/preview","POST",{},mobileA.token,{origin:"https://foreign.invalid"}))).status,200);
+    assert.equal((await bearerGuard(bearer("/api/businesses", "GET", undefined, mobileA.token, {cookie:"next-auth.session-token=synthetic-session-a"}))).status,401);
+    assert.equal((await bearerGuard(bearer("/api/businesses", "GET", undefined, "short"))).status,401);
+    assert.equal((await bearerGuard(bearer("/api/businesses", "GET", undefined, "x".repeat(513)))).status,401);
+    assert.equal((await bearerGuard(new NextRequest("http://localhost/api/businesses", {headers:{authorization:`Bearer ${"a".repeat(42)}!`}}))).status,401);
+    const mediaRoot = mkdtempSync(join(tmpdir(),"private-media-"));
+    try {
+      writeFileSync(join(mediaRoot,"draft-888.png"),Buffer.from([137,80,78,71])); process.env.MEDIA_ROOT = mediaRoot;
+      const media = require("../app/api/media/[name]/route").GET;
+      assert.equal((await media(bearer("/api/media/draft-888.png"),{params:Promise.resolve({name:"draft-888.png"})})).status,404);
+      assert.equal((await media(bearer("/api/media/draft-888.png","GET",undefined,mobileB.token),{params:Promise.resolve({name:"draft-888.png"})})).status,200);
+    } finally { rmSync(mediaRoot,{recursive:true,force:true}); }
+    const mobileExpired = await createMobileSession(a.id);
+    await client.query("UPDATE auth_sessions SET expires=now()-interval '1 second' WHERE token_hash=$1", [sessionHash(mobileExpired.token)]);
+    assert.equal((await bearerGuard(bearer("/api/businesses","GET",undefined,mobileExpired.token))).status,401);
+    const mobileCapped = await createMobileSession(a.id);
+    await client.query("UPDATE auth_sessions SET created_at=now()-interval '91 days', expires=now()+interval '1 day' WHERE token_hash=$1", [sessionHash(mobileCapped.token)]);
+    assert.equal((await bearerGuard(bearer("/api/businesses","GET",undefined,mobileCapped.token))).status,401);
+    const mobileSliding = await createMobileSession(a.id);
+    await client.query("UPDATE auth_sessions SET created_at=now()-interval '89 days', expires=now()+interval '1 hour' WHERE token_hash=$1", [sessionHash(mobileSliding.token)]);
+    assert.equal((await bearerGuard(bearer("/api/businesses","GET",undefined,mobileSliding.token))).status,200);
+    const cap = (await client.query("SELECT expires,created_at + interval '90 days' AS cap FROM auth_sessions WHERE token_hash=$1",[sessionHash(mobileSliding.token)])).rows[0];
+    assert.equal(cap.expires.getTime(), cap.cap.getTime());
+    process.env.OWNER_GENERATION_DAILY_LIMIT = "1";
+    await client.query("DELETE FROM owner_usage WHERE owner_id=$1 AND kind='generation'",[a.id]);
+    await client.query("UPDATE businesses SET owner_id=$1 WHERE id=$2",[a.id,bb]);
+    assert.equal((await renderGuard(bearer("/api/images/render","POST",{draftPostId:draft},mobileA.token))).status,200);
+    assert.equal((await renderGuard(bearer("/api/images/render","POST",{draftPostId:draft},mobileA.token))).status,429);
+    await client.query("UPDATE businesses SET owner_id=$1 WHERE id=$2",[b.id,bb]);
+    process.env.OWNER_GENERATION_DAILY_LIMIT = "25";
+    const revoke = require("../app/api/mobile/session/revoke/route").POST;
+    assert.equal((await revoke(bearer("/api/mobile/session/revoke","POST",undefined,mobileA.token))).status,200);
+    assert.equal((await bearerGuard(bearer("/api/businesses","GET",undefined,mobileA.token))).status,401);
+    assert.equal((await bearerGuard(bearer("/api/businesses","GET",undefined,mobileB.token))).status,200);
   });
   console.log("anonymous route inventory + owner/session/origin/limit/media Postgres tests passed");
 }
