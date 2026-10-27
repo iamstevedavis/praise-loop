@@ -65,6 +65,20 @@ logs captions/reviews, or marks local rows scheduled. A test-only fake returns
 provider=fake/status=simulated/confirmed=false and cannot represent real publication.
 No credentials, new dependencies, schema changes or production changes in this PR.
 
+### Partial implementation (adapter + credential encryption, unverified live)
+
+`lib/integrations/buffer.ts` is a Buffer GraphQL adapter tested only against mocked
+`fetch` (`scripts/test-buffer.ts`). It refuses incomplete drafts and past times before
+any network call, retries only 429 (bounded, Retry-After capped at 60s), maps 401/403
+to an auth error, media/GraphQL errors to a rejection, and treats timeout/5xx/unreadable
+responses as `SchedulerAmbiguous` (never auto-resubmitted). Only a returned post id with
+status `scheduled` yields `confirmed: true`. `lib/integrations/credentials.ts` provides
+AES-256-GCM encryption with owner/business-bound AAD, keyed by `CREDENTIAL_ENCRYPTION_KEY`
+(32 bytes base64). Neither is wired into `getSchedulerAdapter()`, which still fails closed.
+Still open for #29: OAuth connect/select/disconnect, credential tables and refresh
+locking, expiring media capability route, worker submit/reconcile/cancel jobs, persisted
+external IDs/audit, and the owner-approved live test.
+
 ## Google Business Profile feasibility (#46) — checked 2026-10-15
 
 Status: BLOCKED. No approved developer project, OAuth client/owner grant, verified
