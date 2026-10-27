@@ -115,3 +115,8 @@ Decision log to capture architecture/product calls and why they were made.
 - Date: 2026-10-26
   Decision: Monetize through server-enforced plans (free/pro) unlocked by app-store subscriptions (#79)
   Why: AI captions, review sync, AI review replies and more posts per week are worth paying for, while CSV import and one weekly post keep a free tier. Entitlements live on the server so the app can't unlock features itself. The billing provider (for example RevenueCat) is chosen and stubbed in its own issue, as CONTRIBUTING.md requires.
+
+- Date: 2026-10-27
+  Decision: Verify Google ID tokens with `jose` 6.2.13 (#81)
+  Why: Verification needs JWKS fetching and caching, RS256 signature, issuer, audience and expiry checks. `jose` does all of it with no dependencies and supports local key sets for fixture tests. `google-auth-library` pulls in a much larger tree for the same job.
+
