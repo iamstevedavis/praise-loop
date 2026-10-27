@@ -91,3 +91,11 @@ Owner steps to create the app's OAuth clients (Google Cloud Console, Google Auth
 3. Native Google Sign-In must produce an ID token whose audience is one of these client
    IDs. If the Android library requests the token for the web client ID, add that ID to
    `GOOGLE_ANDROID_CLIENT_ID`. Each variable accepts several comma-separated IDs.
+
+Push tokens (#88): `POST /api/mobile/push-tokens` (`{token, platform}`) registers or refreshes
+the signed-in owner's Expo push token and `DELETE` (`{token}`) removes it on sign-out; a
+token can only be removed by its owner. When a business's weekly generation period has
+finished with drafts awaiting approval, the worker sends each of that owner's devices one
+notification (count, business name and a `praiseloop://queue?businessId=` deep link only),
+recorded in `push_deliveries` so restarts never resend. Tokens Expo reports as
+`DeviceNotRegistered`, in a ticket or a receipt, are deleted. Sends are retried up to three times.
