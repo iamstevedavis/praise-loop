@@ -35,9 +35,21 @@ assert.doesNotMatch(
   "production web image must not run next dev"
 );
 
-console.log("tooling regression tests passed");
+
 
 for (const file of ["docker-compose.yml", "docker-compose.dev.yml"]) {
   assert.match(read(file), /REDIS_URL=redis:\/\/redis:6379/, "Compose must override host Redis URL with its service hostname");
   assert.doesNotMatch(read(file), /REDIS_URL=\$\{REDIS_URL/, "host .env must not redirect the worker to localhost");
 }
+
+// Pilot hosting (#90): the overlay must hide web and take the tunnel token
+// from the environment, and the ops scripts must exist and stay secret-free.
+const pilot = read("docker-compose.pilot.yml");
+assert.match(pilot, /ports: !reset \[\]/, "pilot overlay must unpublish the web port");
+assert.match(pilot, /TUNNEL_TOKEN=\$\{CLOUDFLARE_TUNNEL_TOKEN:\?/, "tunnel token must come from .env, required");
+assert.doesNotMatch(pilot, /eyJ[A-Za-z0-9]{20,}/, "no tunnel token in the repo");
+assert.match(read(".env.example"), /^CLOUDFLARE_TUNNEL_TOKEN=$/m, "token must be blank in .env.example");
+for (const f of ["backup.sh", "restore.sh", "healthcheck.sh"]) {
+  assert.match(read(`ops/${f}`), /^#!\/usr\/bin\/env bash\nset -euo pipefail|^#!\/usr\/bin\/env bash\n(#.*\n)+set -euo pipefail/, `${f} must fail fast`);
+}
+console.log("tooling regression tests passed");

@@ -102,3 +102,58 @@ skip honestly and exits 0, so CI stays green without credentials.
 - `docker compose up --build` is the production-style path: multi-stage builds, deterministic `npm ci`, healthchecks, bounded shutdown (`stop_grace_period`), shared media volume, loopback-only database/Redis ports.
 - Restart safety: database and generated media live in named volumes (`postgres_data`, `generated_media`); container restarts preserve them.
 - Image delivery: the worker writes PNGs into the shared `generated_media` volume; the web container serves them via `GET /api/media/<filename>` (see `app/api/media/[name]/route.ts`). Browsers should always use the `/api/media/...` URL stored in `draft_posts.image_path` — never a bare `public/generated/...` path, because runtime-written files under `public/` are not guaranteed to be served by the Next production server.
+
+## Pilot hosting
+
+Runs the production stack on the home server, reachable over HTTPS through a
+Cloudflare Tunnel with no inbound ports ([hosting plan](mobile-plan.md#hosting)).
+`docker-compose.pilot.yml` adds `cloudflared` and unpublishes the web port, so
+only the tunnel (an outbound connection) reaches `web`. Postgres and Redis stay
+on loopback. Commands marked **owner** touch the real server and secrets, so the
+owner runs them.
+
+1. **Owner:** in Cloudflare Zero Trust, create a tunnel, add a public hostname
+   (for example `praise.example.com`) with service `http://web:3000`, and copy
+   the tunnel token.
+2. **Owner:** on the server, `cp .env.example .env` and set strong
+   `POSTGRES_PASSWORD`, `NEXTAUTH_SECRET`, Google and OpenAI keys,
+   `CLOUDFLARE_TUNNEL_TOKEN`, and `NEXTAUTH_URL=https://praise.example.com`. The
+   app's production `API_BASE_URL` is that same URL. Add
+   `https://praise.example.com/api/auth/callback/google` as an authorized
+   redirect URI on the Google OAuth client ([auth.md](auth.md)).
+3. **Owner:** start it: `docker compose -f docker-compose.yml -f docker-compose.pilot.yml up -d --build`.
+4. Verify from outside the home network (phone on mobile data):
+   `curl -I https://praise.example.com/` works, and
+   `nc -vz <home public IP> 3000 5432 6379` is refused.
+
+### Backups and restore
+
+`ops/backup.sh` writes a gzipped `pg_dump` and a tarball of the `generated_media`
+volume, checks both, copies them off the machine with [rclone](https://rclone.org)
+(`BACKUP_REMOTE`, for example Backblaze B2 or Google Drive), and deletes copies
+older than `RETENTION_DAYS` (default 14). **Owner:** configure an rclone remote,
+then cron it from the repo root:
+
+```cron
+30 3 * * * cd /srv/praise-loop && BACKUP_REMOTE=offsite:praise-loop HEALTHCHECK_PING_URL=<backup heartbeat URL> ops/backup.sh >> /var/log/praise-backup.log 2>&1
+```
+
+Restore (replaces the database and media) into a fresh or running stack:
+
+```bash
+rclone copy offsite:praise-loop/db-<stamp>.sql.gz . && rclone copy offsite:praise-loop/media-<stamp>.tar.gz .
+COMPOSE="docker compose -f docker-compose.yml -f docker-compose.pilot.yml" ops/restore.sh db-<stamp>.sql.gz media-<stamp>.tar.gz
+```
+
+Drill the restore after setup and after any change to the stack. The script was
+drilled on a throwaway local stack: seed a business and a media file, back up,
+`docker compose down -v`, restore into a new project, and both came back.
+
+### Uptime alert
+
+`ops/healthcheck.sh` requests `PUBLIC_URL/api/auth/providers` and pings
+`HEALTHCHECK_PING_URL` only on success. Create two heartbeat checks in a free
+Healthchecks.io account (one for this, one for the backup) that email or push
+the owner when a ping is missing. Cron it every 5 minutes:
+`*/5 * * * * PUBLIC_URL=https://praise.example.com HEALTHCHECK_PING_URL=... /srv/praise-loop/ops/healthcheck.sh`.
+A power or internet outage stops the pings, which raises the alert.
