@@ -128,3 +128,6 @@ Decision log to capture architecture/product calls and why they were made.
   Decision: Verify Google ID tokens with `jose` 6.2.13 (#81)
   Why: Verification needs JWKS fetching and caching, RS256 signature, issuer, audience and expiry checks. `jose` does all of it with no dependencies and supports local key sets for fixture tests. `google-auth-library` pulls in a much larger tree for the same job.
 
+- Date: 2026-10-27
+  Decision: Land the Buffer adapter and credential encryption behind the still-closed scheduler gate (#29, partial).
+  Why: These are safe without provider access: mocked-fetch contract tests cover auth, 429, timeout-after-acceptance (ambiguous, never resubmitted), media failure and incomplete/past drafts. The adapter is not selected by `getSchedulerAdapter()` and its mutation shape is unverified live, so no success is claimed. OAuth, storage, worker jobs and live acceptance remain blocked on owner access.
