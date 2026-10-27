@@ -63,7 +63,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - OWNER_GENERATION_DAILY_LIMIT=${OWNER_GENERATION_DAILY_LIMIT:-25}
       - MOBILE_MINIMUM_VERSION=${MOBILE_MINIMUM_VERSION:-1.0.0}
-      - MOBILE_LATEST_VERSION=${MOBILE_LATEST_VERSION:-1.0.0}
+      - MOBILE_LATEST_VERSION=${MOBILE_LATEST_VERSION:-}
       - MOBILE_FEATURES=${MOBILE_FEATURES:-}
     # !override drops the base file's root-owned generated_media volume; dev
     # media lives in ./private-media (gitignored) via the repo mount instead.
