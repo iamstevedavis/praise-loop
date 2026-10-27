@@ -1,6 +1,8 @@
 export type SchedulePayload = {
   draftPostId: number; businessId: number; quoteText: string;
   captionText: string; imagePath: string | null; scheduledFor: string;
+  /** Expiring, narrowly scoped URL the provider can fetch; never the private /api/media path. */
+  mediaUrl?: string;
 };
 export type ScheduleReceipt = { provider: "buffer" | "fake"; confirmed: boolean; externalId?: string; status: "scheduled" | "simulated" };
 export interface SchedulerAdapter { schedulePost(payload: SchedulePayload): Promise<ScheduleReceipt>; }
