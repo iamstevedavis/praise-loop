@@ -131,3 +131,7 @@ Decision log to capture architecture/product calls and why they were made.
 - Date: 2026-10-27
   Decision: Land the Buffer adapter and credential encryption behind the still-closed scheduler gate (#29, partial).
   Why: These are safe without provider access: mocked-fetch contract tests cover auth, 429, timeout-after-acceptance (ambiguous, never resubmitted), media failure and incomplete/past drafts. The adapter is not selected by `getSchedulerAdapter()` and its mutation shape is unverified live, so no success is claimed. OAuth, storage, worker jobs and live acceptance remain blocked on owner access.
+
+- Date: 2026-10-27
+  Decision: Build Google review sync against a stubbed client interface while API access is pending (#46)
+  Why: Approval can take weeks, and the storage, encryption, checkpoint, retry and revoke logic is provider-independent. `liveClient()` throws until access exists, so nothing can call Google or be mistaken for a live integration. Uses Node crypto (AES-256-GCM) and no new dependency; #46 stays open until the live acceptance test in integrations.md passes.
