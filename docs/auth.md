@@ -62,3 +62,11 @@ all actual route exports. Older domain tests bypass the guard explicitly; bounda
 tests do not. Production auth/CSRF/sign-out HTTP smoke uses synthetic sessions only;
 real Google login still requires owner-provided OAuth configuration and a manual check.
 No live OAuth acceptance is claimed without that configuration.
+
+Push tokens (#88): `POST /api/mobile/push-tokens` (`{token, platform}`) registers or refreshes
+the signed-in owner's Expo push token and `DELETE` (`{token}`) removes it on sign-out; a
+token can only be removed by its owner. When a business's weekly generation period has
+finished with drafts awaiting approval, the worker sends each of that owner's devices one
+notification (count, business name and a `praiseloop://queue?businessId=` deep link only),
+recorded in `push_deliveries` so restarts never resend. Tokens Expo reports as
+`DeviceNotRegistered`, in a ticket or a receipt, are deleted. Sends are retried up to three times.

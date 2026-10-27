@@ -60,6 +60,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `OPENAI_API_KEY` | no | Enables caption generation; without it the worker marks affected drafts `failed` with an actionable error instead of crashing |
 | `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`); on timeout the draft is marked `failed` with an actionable error |
 | `DRAFT_PIPELINE_INTERVAL_MS` | no | Worker sweep interval (default `60000`) |
+| `EXPO_ACCESS_TOKEN` | no | Expo push access token; only needed if enhanced push security is enabled on the Expo project |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
 
