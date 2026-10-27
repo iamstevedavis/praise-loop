@@ -147,3 +147,26 @@ location import followed by a duplicate-free refresh, with sanitized evidence.
 A retention/deletion migration must preserve draft references while respecting the
 resolved policy; do not blindly delete reviews. No connector, schema change, live
 acceptance, production configuration or provider permission is claimed by this PR.
+
+### Scaffolding added for #46 (stubbed, not live) — 2026-10-27
+
+Google has not approved Business Profile API access, so the sync is built only
+against a `GoogleReviewsClient` interface (`lib/integrations/googleReviews.ts`).
+`liveClient()` deliberately throws; tests use scripted fixtures with no network,
+credentials or customer content. Migration 012 adds `google_connections`.
+
+Implemented and tested: ownership-checked connect/disconnect; AES-256-GCM refresh
+token encryption with owner/business-bound AAD (key `GOOGLE_TOKEN_KEY`, 32 base64
+bytes, supplied at runtime; no rotation tooling yet); paged import with a durable
+per-page checkpoint; idempotent upserts on the existing review identity key; edits
+update only the `reviews` row, never `draft_posts`; bounded retry honoring 429
+Retry-After; `invalid_grant` marks the connection `revoked` and drops the token;
+disconnect removes the token locally and revokes at Google best-effort; last sync,
+count and a sanitized error code are stored.
+
+Still unverified/missing (so #46 stays open, `Refs #46`): the live client and
+OAuth consent routes/location picker, exposing sync status in the UI, scheduling
+the sync in the #43 worker, periodic full reconciliation for deleted reviews,
+review-reuse/retention policy confirmation from Google, key rotation, and the
+mandatory live test with sanitized evidence. Add `GOOGLE_TOKEN_KEY` to deploy secrets
+before use.
