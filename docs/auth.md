@@ -31,8 +31,18 @@ Every API route except NextAuth is wrapped in the same owner guard. Business lis
 are filtered server-side; guessed foreign business/draft/media IDs return 404. A
 composite FK rejects new cross-business review references without deleting legacy
 data; existing violations require operator reconciliation before validating that FK.
-Writes require an Origin matching NEXTAUTH_URL and reject cross-site fetches.
+Cookie writes require an Origin matching NEXTAUTH_URL and reject cross-site fetches.
+Bearer writes skip that check because a browser never attaches the token itself.
 Uploads are stream-bounded to 1.5 MB before JSON/form parsing; CSV has tighter limits.
+
+Mobile bearer sessions (#80): `POST /api/mobile/session` (added in #81) creates a
+session with `kind = 'mobile'` and returns the raw token once; only its SHA-256 hash
+is stored. A request may authenticate with either the NextAuth cookie or
+`Authorization: Bearer <43-character token>`, never both. Mobile sessions last 30
+days from the last request, capped at 90 days after creation, and
+`POST /api/mobile/session/revoke` deletes the calling session. Malformed, expired,
+revoked and oversized (over 43 characters) tokens return 401. The same ownership,
+CSRF, upload-size and daily-limit rules apply to both session kinds.
 Generation attempts use atomic shared per-owner/day UTC counters (default 25,
 `OWNER_GENERATION_DAILY_LIMIT`). Preview has a separate 120/day limit. Attempts
 consume budget even on provider failure; the UI receives 429 on exhaustion.
