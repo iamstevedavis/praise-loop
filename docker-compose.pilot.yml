@@ -1,0 +1,20 @@
+# Pilot hosting overlay: home server + Cloudflare Tunnel (issue #90).
+# Usage: docker compose -f docker-compose.yml -f docker-compose.pilot.yml up -d --build
+# Requires Docker Compose 2.24.4+ (uses the `!reset` merge tag).
+#
+# Only cloudflared talks to the internet, outbound. The web port is no longer
+# published at all, and Postgres/Redis stay on loopback. The tunnel token comes
+# from .env (CLOUDFLARE_TUNNEL_TOKEN) on the server and is never committed.
+services:
+  web:
+    ports: !reset []
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.9.1
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
