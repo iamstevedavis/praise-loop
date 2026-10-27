@@ -119,3 +119,8 @@ Decision log to capture architecture/product calls and why they were made.
 - Date: 2026-10-26
   Decision: Store one plan per owner and enforce entitlements on the server (#94)
   Why: A plan per business could not enforce "more than one business", and store subscriptions attach to an owner anyway. One `owner_plans` row with source and expiry keeps upgrades simple; every owned business inherits the limits. Weekly targets are capped inside the generation lock, the free watermark is part of the deterministic render, and business creation is serialized per owner. Expired plans fall back to free without deleting the record, and `owner_plan_events` records every operator or future billing change.
+
+- Date: 2026-10-27
+  Decision: Verify Google ID tokens with `jose` 6.2.13 (#81)
+  Why: Verification needs JWKS fetching and caching, RS256 signature, issuer, audience and expiry checks. `jose` does all of it with no dependencies and supports local key sets for fixture tests. `google-auth-library` pulls in a much larger tree for the same job.
+
