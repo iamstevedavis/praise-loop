@@ -62,3 +62,30 @@ all actual route exports. Older domain tests bypass the guard explicitly; bounda
 tests do not. Production auth/CSRF/sign-out HTTP smoke uses synthetic sessions only;
 real Google login still requires owner-provided OAuth configuration and a manual check.
 No live OAuth acceptance is claimed without that configuration.
+
+Google sign-in from the app (#81): the app sends `{ "idToken": "<Google ID token>" }` to
+`POST /api/mobile/session`, a public route (the only one besides NextAuth). The server
+verifies the RS256 signature against Google's published keys
+(https://www.googleapis.com/oauth2/v3/certs, cached by `jose`), the issuer
+(`accounts.google.com`), expiry, `email_verified`, and that the audience is
+`GOOGLE_IOS_CLIENT_ID` or `GOOGLE_ANDROID_CLIENT_ID`. Anything else returns 401, including
+every request while neither variable is set (fail closed). It then finds or creates the owner through
+`auth_accounts` (`provider = google`, `provider_account_id = sub`), the same row the web
+uses, so both see the same businesses. A web owner with the same verified email but no
+Google account row is linked instead of duplicated. No Google token is stored or logged.
+Failed attempts are limited to 10 per 15 minutes per client IP (`cf-connecting-ip`, else
+`x-forwarded-for`), counted in process memory: it resets on restart and is per replica,
+which suits the single-instance pilot. Move it to Postgres if the web tier is replicated.
+
+Owner steps to create the app's OAuth clients (Google Cloud Console, Google Auth Platform
+> Clients, in the same project as the web client; live sign-in waits on these, #78):
+
+1. iOS: create an OAuth client of type "iOS" with the app's bundle ID (the Expo
+   `ios.bundleIdentifier`). Put its client ID in `GOOGLE_IOS_CLIENT_ID`.
+2. Android: create a client of type "Android" with the package name (Expo
+   `android.package`) and the SHA-1 of the signing certificate. Use the EAS or Play App
+   Signing SHA-1 for store builds and add a separate client for the debug keystore if
+   you test with one. Put the client ID(s) in `GOOGLE_ANDROID_CLIENT_ID`.
+3. Native Google Sign-In must produce an ID token whose audience is one of these client
+   IDs. If the Android library requests the token for the web client ID, add that ID to
+   `GOOGLE_ANDROID_CLIENT_ID`. Each variable accepts several comma-separated IDs.
