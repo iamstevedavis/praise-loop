@@ -69,6 +69,14 @@ async function main() {
       assert.equal(proRequest.inserted, 5, "pro plans reserve the configured weekly target");
       assert.equal(proRequest.target, 5);
 
+      // Upgrading mid-week raises the existing period's cap without losing its allocation.
+      await setOwnerPlan("free-owner", "pro", { reason: "Synthetic mid-week upgrade" });
+      await c.query("UPDATE businesses SET weekly_target=3 WHERE id=$1", [freeBusiness]);
+      const upgraded = await requestGeneration(freeBusiness, 5, now);
+      assert.equal(upgraded.target, 3);
+      assert.equal(upgraded.inserted, 2, "the upgrade unlocks the remaining weekly drafts");
+      await setOwnerPlan("free-owner", "free", { reason: "Synthetic downgrade" });
+
       let renderedWatermark: boolean | undefined;
       const generationDeps: GenerationDeps = {
         clock: () => now,
