@@ -25,8 +25,9 @@ export class BufferSchedulerAdapter implements SchedulerAdapter {
       } catch { throw new SchedulerAmbiguous("timeout or network failure after send"); }
       if (res.status === 401 || res.status === 403) throw new SchedulerAuthError();
       if (res.status === 429) { // rejected before processing: safe to retry, bounded
-        const wait = Math.min(Math.max(Number(res.headers.get("retry-after")) || 1, 1), 60) * 1000;
-        if (attempt >= max) throw new SchedulerRateLimited(wait);
+        const wait = Math.max(Number(res.headers.get("retry-after")) || 1, 1) * 1000;
+        // A window longer than we are willing to wait is surfaced as-is, not shortened into a retry that cannot succeed.
+        if (attempt >= max || wait > 60000) throw new SchedulerRateLimited(wait);
         await sleep(wait); continue;
       }
       if (!res.ok) throw new SchedulerAmbiguous(`HTTP ${res.status}`);
