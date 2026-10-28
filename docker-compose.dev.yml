@@ -87,6 +87,7 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-effective_memory}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - EXPO_ACCESS_TOKEN=${EXPO_ACCESS_TOKEN:-}
       - REDIS_URL=redis://redis:6379
       - OWNER_GENERATION_DAILY_LIMIT=${OWNER_GENERATION_DAILY_LIMIT:-25}
       - DRAFT_PIPELINE_INTERVAL_MS=${DRAFT_PIPELINE_INTERVAL_MS:-60000}
