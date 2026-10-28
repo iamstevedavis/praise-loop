@@ -61,6 +61,14 @@ async function main() {
     assert.equal((await exchange(intruder)).status, 401);
     assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider_account_id='google-sub-3'")).rows[0].n, 0);
 
+    // Two different subjects racing on one unlinked email: exactly one links, the other is rejected.
+    await client.query(`INSERT INTO auth_users(id,name,email) VALUES('race-owner','Race','race@example.invalid')`);
+    const racer = (sub: string) => new SignJWT({ email: "race@example.invalid", email_verified: true }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
+      .setSubject(sub).setIssuer(ISS).setAudience(IOS).setIssuedAt().setExpirationTime("1h").sign(good.privateKey);
+    const raced = await Promise.all([exchange(await racer("race-a"), "203.0.113.60"), exchange(await racer("race-b"), "203.0.113.61")]);
+    assert.deepEqual(raced.map(r => r.status).sort(), [200, 401]);
+    assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE owner_id='race-owner'")).rows[0].n, 1);
+
     // Rejections: all 401, no session or owner created.
     const sessionsBefore = (await client.query("SELECT count(*)::int AS n FROM auth_sessions")).rows[0].n;
     const bad: [string, unknown][] = [
