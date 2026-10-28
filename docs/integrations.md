@@ -153,7 +153,7 @@ acceptance, production configuration or provider permission is claimed by this P
 Google has not approved Business Profile API access, so the sync is built only
 against a `GoogleReviewsClient` interface (`lib/integrations/googleReviews.ts`).
 `liveClient()` deliberately throws; tests use scripted fixtures with no network,
-credentials or customer content. Migration 012 adds `google_connections`.
+credentials or customer content. Migration 015 adds `google_connections`.
 
 Implemented and tested: ownership-checked connect/disconnect; AES-256-GCM refresh
 token encryption with owner/business-bound AAD (key `GOOGLE_TOKEN_KEY`, 32 base64
