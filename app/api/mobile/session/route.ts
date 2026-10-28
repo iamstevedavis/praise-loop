@@ -3,6 +3,21 @@ import { verifyGoogleIdToken } from "../../../../lib/googleIdToken";
 import { findOrCreateGoogleOwner, recordFailure, tooManyFailures } from "../../../../lib/mobileSignIn";
 import { createMobileSession } from "../../../../lib/mobileSessions";
 
+// Reads at most `max` bytes of the stream, so a missing or false Content-Length cannot make us buffer more.
+async function readLimited(req: NextRequest, max: number) {
+  const reader = req.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = []; let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > max) { await reader.cancel(); throw new Error("body too large"); }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 // Public by design: this is where a bearer session is born. Exchanges a Google ID
 // token from native Google Sign-In for a mobile session. Neither token is logged.
 export async function POST(req: NextRequest) {
@@ -10,9 +25,8 @@ export async function POST(req: NextRequest) {
   try {
     const client = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
     if (tooManyFailures(client)) return reply(429, { error: "Too many failed sign-in attempts; try again later" });
-    const declared = Number(req.headers.get("content-length") ?? 0);
     let idToken: unknown;
-    if (declared <= 8192) { try { idToken = (await req.json())?.idToken; } catch { /* handled below */ } }
+    try { idToken = JSON.parse(await readLimited(req, 8192))?.idToken; } catch { /* handled below */ }
     const identity = typeof idToken === "string" ? await verifyGoogleIdToken(idToken) : null;
     if (!identity) { recordFailure(client); return reply(401, { error: "Invalid Google sign-in" }); }
     const session = await createMobileSession(await findOrCreateGoogleOwner(identity));
