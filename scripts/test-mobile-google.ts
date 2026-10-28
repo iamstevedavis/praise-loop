@@ -76,6 +76,12 @@ async function main() {
     assert.equal((await exchange(await token(), "198.51.100.9")).status, 429);
     assert.equal((await exchange(await token(), "198.51.100.10")).status, 200);
 
+    // An oversized body is rejected from the bytes read, even when Content-Length is absent.
+    resetFailures();
+    const big = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(JSON.stringify({ idToken: "x".repeat(20000) }))); c.close(); } });
+    const chunked = new NextRequest("http://localhost/api/mobile/session", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.50" }, body: big, duplex: "half" } as ConstructorParameters<typeof NextRequest>[1]);
+    assert.equal((await require("../app/api/mobile/session/route").POST(chunked)).status, 401);
+
     // Unconfigured audience list fails closed.
     delete process.env.GOOGLE_IOS_CLIENT_ID; delete process.env.GOOGLE_ANDROID_CLIENT_ID;
     assert.equal((await exchange(await token())).status, 401);
