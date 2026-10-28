@@ -9,7 +9,7 @@ import Icon from "../ui/Icon";
 import styles from "./onboarding.module.css";
 
 type Draft = { id: string; version: number; quote_text: string; caption_text: string; image_path: string | null; status: string; job_state?: string; error_code?: string };
-type Progress = { business: { id: string; name: string; timezone: string; weekly_target: number } | null; reviews: number; drafts: Draft[]; period?: { reason: string; allocated: number; target: number } };
+type Progress = { business: { id: string; name: string; timezone: string; weekly_target: number } | null; reviews: number; drafts: Draft[]; period?: { reason: string; allocated: number; target: number }; postsPerWeek?: number };
 type ImportResult = { imported: number; duplicates: number; rejectedInvalid: number; skippedEmpty: number; failedRows: number; errors?: { row: number; error: string }[] };
 
 const jobLabels: Record<string, string> = { pending: "Waiting its turn…", running: "Writing the caption and designing the image…", retry: "Hit a snag — trying again automatically…", complete: "Ready" };
@@ -91,7 +91,7 @@ export default function Onboarding() {
   }
   if (!data) return <div className={styles.frame}><main className={styles.body}><p className="pl-muted" role="status">{message || "Loading your setup…"}</p></main></div>;
 
-  const target = Math.min(3, business?.weekly_target ?? 3);
+  const target = Math.min(3, business?.weekly_target ?? 3, data.postsPerWeek ?? 3);
   const complete = data.drafts.filter(d => d.caption_text.trim() && d.image_path && !["failed", "archived"].includes(d.status)).slice(0, target);
   const ready = complete.length === target && complete.every(d => loaded[d.id] === d.image_path);
   const active = data.drafts.some(d => ["pending", "running", "retry"].includes(d.job_state ?? ""));

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "../../../../lib/db";
 import type { BrandTone } from "../../../../lib/branding";
 import { renderDraftImage } from "../../../../lib/services/imageRenderer";
+import { entitlementsFor } from "../../../../lib/services/entitlements";
 
 async function handlePOST(req: NextRequest) {
   try {
@@ -18,13 +19,14 @@ async function handlePOST(req: NextRequest) {
       id: number;
       quote_text: string;
       business_name: string;
+      owner_id: string;
       brand_colors: Record<string, string> | null;
       logo_url: string | null;
       brand_tone: BrandTone;
       rating: number | null;
       author_name: string | null;
     }>(
-      `SELECT d.id, d.quote_text, b.name AS business_name, b.brand_colors, b.logo_url, b.brand_tone, r.rating, r.author_name
+      `SELECT d.id, d.quote_text, b.name AS business_name, b.owner_id, b.brand_colors, b.logo_url, b.brand_tone, r.rating, r.author_name
        FROM draft_posts d
        JOIN businesses b ON b.id = d.business_id
        LEFT JOIN reviews r ON r.id = d.review_id AND r.business_id = d.business_id
@@ -40,6 +42,7 @@ async function handlePOST(req: NextRequest) {
     const row = draft.rows[0];
     const brandHex = row.brand_colors?.primary ?? null;
     const secondaryBrandHex = row.brand_colors?.secondary ?? null;
+    const entitlements = await entitlementsFor(row.owner_id);
 
     const rendered = await renderDraftImage({
       draftPostId,
@@ -51,7 +54,8 @@ async function handlePOST(req: NextRequest) {
       secondaryBrandHex,
       logoUrl: row.logo_url,
       brandTone: row.brand_tone,
-      templateConfig: row.brand_colors
+      templateConfig: row.brand_colors,
+      watermark: entitlements.limits.watermark
     });
 
     const updated = await query<{ id: number; image_path: string }>(

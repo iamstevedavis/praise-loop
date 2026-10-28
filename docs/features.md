@@ -188,8 +188,56 @@ job retries. Every draft mutation requires its current `version`; refresh on 409
 Approval requires nonempty caption and a decoded, available 1080px PNG. Edits and
 regeneration clear approval; scheduled/published items require provider operations.
 Migration 009 adds archived status, revisions and append-only actor/time/reason events.
+Migration 013 adds owner-reported `shared` (only from `approved`, with `shared_at`
+and an `owner_shared` audit event). It is shown as "Shared by you", never as a
+verified publication, and is read-only; undo back to approved is a follow-up.
 Generated PNGs now use immutable content hashes; historical images remain compatible.
 After building, run `TEST_BROWSER=1 TEST_DATABASE_URL=... npx ts-node scripts/test-approval-browser.ts`
 with Chromium installed (`CHROMIUM_PATH` defaults to /usr/bin/chromium). Uses synthetic
 sessions and fixtures only, with no external AI/social calls. Rollback requires
 stopping writes first; retain audit events, revision columns, and immutable media.
+
+## Plans and entitlements (#94)
+
+An owner has one plan, `free` (the default) or `pro`, stored in `owner_plans`
+with its source (`manual` or `store`) and optional expiry. `owner_plan_events`
+is an append-only audit trail of every change. Every owned business inherits
+the owner's plan, which is what lets the plan limit "more than one business".
+
+| Limit | Free | Pro |
+|---|---|---|
+| Drafts per business per week | 1 | 5 |
+| Templates | 1 | 5 |
+| Image watermark | Yes | No |
+| Automatic review sync | No | Yes |
+| AI review replies | No | Yes |
+| Owned businesses | 1 | 3 |
+
+The limits live in `lib/services/entitlements.ts` and are enforced on the server:
+
+- `requestGeneration` caps the business's configured `weekly_target` inside the
+  same business lock that reserves the weekly quota, including for a period
+  created under an older plan.
+- The worker and the manual render route pass the free-plan watermark into the
+  deterministic renderer. It is drawn in the bottom safe margin, so it never
+  covers the quote, reviewer, business name or logo, and a plan change produces
+  a new content-addressed image.
+- `POST /api/businesses` serializes creation per owner with an advisory lock and
+  refuses a new business past the limit. A repeated `onboardingKey` still returns
+  the original business, so a retried onboarding request cannot be blocked or
+  duplicated.
+- `GET /api/entitlements` is owner-authenticated, read-only and returns the
+  effective plan and limits. No route lets an owner change their own plan.
+
+Expired Pro falls back to Free at read time without deleting the stored plan, so
+a renewal restores Pro. Operators set plans with:
+
+```sh
+npm run plan:set -- owner@example.com pro --reason "Pilot upgrade"
+npm run plan:set -- --business 42 pro --expires 2027-01-01
+```
+
+The script resolves an email or business to the owner and records the actor,
+reason and expiry in `owner_plan_events`. Payment-provider purchases will use
+the same module from a verified webhook (#95). Migration 012 is additive;
+rollback can leave the plan tables in place while reverting the checks.

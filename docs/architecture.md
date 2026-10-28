@@ -45,17 +45,31 @@ Define and maintain the core stack in this section as the source of truth:
 - Rendering: templates → images
 - Scheduling: publish/schedule integration (scheduler-first)
 - Approval: human-in-the-loop state machine for drafts
+- Entitlements: owner plan → server-enforced limits for generation, rendering and business creation
 
 ### Data flow rules
 
 - All writes go through the API layer (no direct DB writes from UI)
 - Worker consumes jobs and writes results back to Postgres
-- Rendering is deterministic from (template + brand + quote + caption)
+- Rendering is deterministic from (template + brand + quote + caption + plan watermark)
+- Plan limits live in one server module; clients read them from `GET /api/entitlements` and never unlock features themselves
+
+### API compatibility for the mobile app
+
+- Installed apps cannot be upgraded on demand. API changes the app uses must be
+  additive; a breaking change needs a new route and an old one kept until the
+  minimum supported version moves past it.
+- `GET /api/mobile/config` is public and owner-free. It returns
+  `minimumVersion`, `latestVersion` and `features` from `MOBILE_MINIMUM_VERSION`,
+  `MOBILE_LATEST_VERSION` and comma-separated `MOBILE_FEATURES` (defaults:
+  `1.0.0`, `1.0.0`, none). Below `minimumVersion` the app shows an update screen.
+  The response is cacheable for a short time and carries no cookies. It is the
+  only unauthenticated route besides NextAuth's handlers.
 
 ### State machine (draft lifecycle)
 
 - ImportedReview → CandidateQuote → DraftPost → Approved → Scheduled → Published (best-effort)
-- Planned for the share-sheet flow: Approved → Shared (owner-reported; never shown as a verified Published)
+- Owner-reported sharing: Approved → Shared (#83). `shared` is never shown as a verified Published; it records `shared_at` and an `owner_shared` audit event, and is read-only afterwards (undo is a follow-up).
 - Every transition is stored with timestamps for audit/debugging
 
 ### Error handling and observability
