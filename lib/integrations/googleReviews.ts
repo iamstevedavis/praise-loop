@@ -60,6 +60,7 @@ export async function disconnect(client: GoogleReviewsClient, owner: string, bus
   return true;
 }
 
+class StaleConnection extends Error {}
 export type SyncResult = { status: "ok" | "revoked" | "failed" | "skipped"; imported: number; updated: number; errorCode?: string };
 type Opts = { maxRetries?: number; sleep?: (ms: number) => Promise<void> };
 
@@ -69,7 +70,9 @@ async function withRetry<T>(run: () => Promise<T>, { maxRetries = 3, sleep = (ms
     catch (e) {
       const retryable = e instanceof GoogleApiError && (e.status === 429 || e.status >= 500);
       if (!retryable || attempt >= maxRetries) throw e;
-      await sleep(Math.min(e.retryAfterMs || 500 * 2 ** attempt, 60000));
+      // A provider delay we are not willing to wait is surfaced, not shortened into a retry that cannot succeed.
+      if (e instanceof GoogleApiError && e.retryAfterMs > 60000) throw e;
+      await sleep(e.retryAfterMs || Math.min(500 * 2 ** attempt, 60000));
     }
   }
 }
@@ -100,6 +103,10 @@ export async function syncReviews(client: GoogleReviewsClient, businessId: numbe
     do {
       const page = await withRetry(() => client.listReviews(access, conn.location_name, token), opts);
       await transaction(async () => {
+        // Revalidate under a row lock: a reconnect (new credential) or disconnect while the page was in flight
+        // must not import into, or move the checkpoint of, the connection the owner now has.
+        const current = await query("SELECT 1 FROM google_connections WHERE id=$1 AND status='active' AND encrypted_refresh_token=$2 AND location_name=$3 FOR UPDATE", [conn.id, conn.encrypted_refresh_token, conn.location_name]);
+        if (!current.rowCount) throw new StaleConnection();
         for (const r of page.reviews) {
           if (!r.reviewId || !(r.rating >= 1 && r.rating <= 5)) continue;
           if (!r.comment?.trim()) {
@@ -125,6 +132,7 @@ export async function syncReviews(client: GoogleReviewsClient, businessId: numbe
     await query("UPDATE google_connections SET last_sync_at=now(), last_sync_count=$2, last_error_code=NULL WHERE id=$1", [conn.id, n.imported + n.updated]);
     return { status: "ok", ...n };
   } catch (e) {
+    if (e instanceof StaleConnection) return { status: "skipped", ...n };
     if (e instanceof GoogleApiError && e.code === "invalid_grant") return fail("access_revoked", "revoked", n);
     return fail(e instanceof GoogleApiError ? `google_${e.status}` : "sync_failed", "failed", n);
   }

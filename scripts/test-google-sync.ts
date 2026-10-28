@@ -81,6 +81,19 @@ async function main() {
     await g.syncReviews(staleClient, a, noSleep);
     const live = (await c.query("SELECT status,encrypted_refresh_token t FROM google_connections WHERE business_id=$1", [a])).rows[0];
     assert.equal(live.status, "active"); assert.ok(live.t, "reconnected credential survives a stale failure");
+    // a scan that outlives a reconnect or disconnect stops without importing or moving the checkpoint
+    await g.connect("g-a", a, loc, "tok-a6");
+    const before = (await c.query("SELECT count(*) FROM reviews WHERE business_id=$1", [a])).rows[0].count;
+    const moving = fake([[rev(201)], [rev(202)]]);
+    const origList = moving.client.listReviews;
+    moving.client.listReviews = async (...args) => { await g.connect("g-a", a, "accounts/1/locations/9", "tok-a7"); return origList(...args); };
+    assert.equal((await g.syncReviews(moving.client, a, noSleep)).status, "skipped");
+    assert.equal((await c.query("SELECT count(*) FROM reviews WHERE business_id=$1", [a])).rows[0].count, before, "stale scan imported nothing");
+    assert.equal((await c.query("SELECT page_checkpoint p FROM google_connections WHERE business_id=$1", [a])).rows[0].p, null);
+    // a Retry-After longer than the 60s cap is surfaced, not shortened
+    const waited: number[] = [];
+    const longWait = await g.syncReviews(fake([[rev(203)]], { list: [new GoogleApiError(429, "rate", 120000)] }).client, a, { sleep: async (ms: number) => { waited.push(ms); } });
+    assert.deepEqual([longWait.status, longWait.errorCode, waited.length], ["failed", "google_429", 0]);
     // disconnect: ownership, revokes at provider, stops sync
     await g.connect("g-a", a, loc, "tok-a3");
     const d = fake([[rev(98)]]);
