@@ -18,6 +18,7 @@ async function main() {
   let t = make([ok(good)]);
   const r = await t.a.schedulePost(payload);
   assert.deepEqual([r.provider, r.confirmed, r.externalId, r.status], ["buffer", true, "p1", "scheduled"]);
+  assert.deepEqual(JSON.parse(t.calls[0].body).variables.input.assets, [{ image: { url: payload.mediaUrl } }], "documented AssetInput shape");
   assert.match(t.calls[0].body, /customScheduled/); assert.match(t.calls[0].body, /2026-12-01T10:00:00.000Z/); assert.equal(t.calls[0].auth, "Bearer TOKEN");
   // incomplete or past drafts never reach the network
   t = make([]);
