@@ -8,6 +8,9 @@
 services:
   web:
     ports: !reset []
+    environment:
+      # Only cloudflared reaches web here, so its client-IP headers can be trusted (rate limiting).
+      - TRUST_PROXY_HEADERS=1
 
   cloudflared:
     image: cloudflare/cloudflared:2025.9.1

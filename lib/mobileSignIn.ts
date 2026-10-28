@@ -13,6 +13,10 @@ export async function findOrCreateGoogleOwner(identity: GoogleIdentity) {
      ON CONFLICT(email) DO UPDATE SET email = auth_users.email RETURNING id`,
     [randomUUID(), identity.name, identity.email]
   )).rows[0].id;
+  // The email fallback only links an owner that has no Google account yet. A different subject presenting
+  // an already-linked email (a reassigned address) must not inherit that owner's data.
+  const linked = await query("SELECT 1 FROM auth_accounts WHERE provider='google' AND owner_id=$1 AND provider_account_id<>$2", [owner, identity.sub]);
+  if (linked.rowCount) return null;
   await query("INSERT INTO auth_accounts(provider,provider_account_id,owner_id) VALUES('google',$1,$2) ON CONFLICT DO NOTHING", [identity.sub, owner]);
   // A concurrent first sign-in may have linked the sub to a different row; the account row wins.
   return (await query<{ owner_id: string }>("SELECT owner_id FROM auth_accounts WHERE provider='google' AND provider_account_id=$1", [identity.sub])).rows[0].owner_id;
