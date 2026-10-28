@@ -45,12 +45,14 @@ Define and maintain the core stack in this section as the source of truth:
 - Rendering: templates → images
 - Scheduling: publish/schedule integration (scheduler-first)
 - Approval: human-in-the-loop state machine for drafts
+- Entitlements: owner plan → server-enforced limits for generation, rendering and business creation
 
 ### Data flow rules
 
 - All writes go through the API layer (no direct DB writes from UI)
 - Worker consumes jobs and writes results back to Postgres
-- Rendering is deterministic from (template + brand + quote + caption)
+- Rendering is deterministic from (template + brand + quote + caption + plan watermark)
+- Plan limits live in one server module; clients read them from `GET /api/entitlements` and never unlock features themselves
 
 ### State machine (draft lifecycle)
 

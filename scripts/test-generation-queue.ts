@@ -10,6 +10,7 @@ async function main() {
   process.env.REDIS_URL=process.env.TEST_REDIS_URL;
   await databaseFixture(async client=>{
     await client.query("INSERT INTO auth_users(id,email) VALUES('queue-owner','queue@example.invalid')");
+    await client.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('queue-owner','pro','manual')");
     const bid=(await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic queue','UTC','queue-owner') RETURNING id")).rows[0].id;
     await client.query("INSERT INTO reviews(business_id,source,source_review_id,rating,text,reviewed_at) SELECT $1,'manual',n::text,5,'A synthetic review with lovely welcoming staff '||n,now() FROM generate_series(1,10) n",[bid]);
     const connection=redisConnection(), name=`fixture-${randomUUID()}`, queue=new Queue(name,{connection});
