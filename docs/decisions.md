@@ -115,3 +115,7 @@ Decision log to capture architecture/product calls and why they were made.
 - Date: 2026-10-26
   Decision: Monetize through server-enforced plans (free/pro) unlocked by app-store subscriptions (#79)
   Why: AI captions, review sync, AI review replies and more posts per week are worth paying for, while CSV import and one weekly post keep a free tier. Entitlements live on the server so the app can't unlock features itself. The billing provider (for example RevenueCat) is chosen and stubbed in its own issue, as CONTRIBUTING.md requires.
+
+- Date: 2026-10-26
+  Decision: Store one plan per owner and enforce entitlements on the server (#94)
+  Why: A plan per business could not enforce "more than one business", and store subscriptions attach to an owner anyway. One `owner_plans` row with source and expiry keeps upgrades simple; every owned business inherits the limits. Weekly targets are capped inside the generation lock, the free watermark is part of the deterministic render, and business creation is serialized per owner. Expired plans fall back to free without deleting the record, and `owner_plan_events` records every operator or future billing change.

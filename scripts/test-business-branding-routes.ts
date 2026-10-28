@@ -7,8 +7,17 @@ boundary.currentOwner = () => "synthetic-owner";
 import assert from "node:assert/strict";
 
 const dbModule = require("../lib/db");
+const entitlementsModule = require("../lib/services/entitlements");
 const captionsModule = require("../lib/services/captions");
 const imageRendererModule = require("../lib/services/imageRenderer");
+
+// Domain route tests stub Postgres and use a fake plan; the real plan checks
+// run against a database in test-entitlements.ts.
+entitlementsModule.entitlementsFor = async () => ({
+  plan: "pro", source: "manual", expiresAt: null,
+  limits: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, businesses: 100 }
+});
+dbModule.transaction = async (run: (client: { query: unknown }) => Promise<unknown>) => run({ query: dbModule.query });
 
 function makeJsonRequest(body: unknown) {
   return {
@@ -19,7 +28,8 @@ function makeJsonRequest(body: unknown) {
 async function postNormalizesToneAndColorsTest() {
   let capturedParams: unknown[] = [];
 
-  dbModule.query = async (_sql: string, params: unknown[]) => {
+  dbModule.query = async (sql: string, params: unknown[]) => {
+    if (!sql.includes("INSERT INTO businesses")) return { rows: [{ n: "0" }], rowCount: 1 };
     capturedParams = params;
     return {
       rows: [

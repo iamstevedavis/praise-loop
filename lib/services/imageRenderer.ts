@@ -49,7 +49,7 @@ export type RenderParams = {
   draftPostId: number; businessName: string; quoteText: string;
   brandHex?: string | null; secondaryBrandHex?: string | null;
   logoUrl?: string | null; brandTone?: BrandTone; templateConfig?: unknown;
-  rating?: number | null; authorName?: string | null;
+  rating?: number | null; authorName?: string | null; watermark?: boolean;
 };
 // quote-card-v1: stars, the verbatim quote, then reviewer and business at the bottom left with the
 // logo bottom right, inside 80px safe margins on a 1080px square.
@@ -69,6 +69,9 @@ export async function renderQuoteCard(params: RenderParams) {
   // The quote stops above the reviewer block, and above the bottom-right logo when there is one.
   const quoteTop = rating ? 172 : 100, quoteBottom = Math.min(authorTop, logo ? 860 : 1080) - 40;
   const quote = await layout(`“${params.quoteText}”`, 920, quoteBottom - quoteTop, options.quoteSize === "large" ? [56, 52, 48, 44, 40] : [48, 44, 40, 36, 32], ink, face("SemiBold", params.brandTone === "premium"));
+  // Free-plan mark sits in the bottom safe margin, so it never covers the quote,
+  // reviewer, business name or logo and needs no layout changes to the card.
+  const watermark = params.watermark ? await layout("Praise Loop", 920, 32, [22, 20, 18, 16], ink, face("Regular")) : null;
   const layers: OverlayOptions[] = [
     { input: { create: { width: 1080, height: 14, channels: 4, background: secondary } }, top: 0, left: 0 },
     { input: quote.input, top: quoteTop + Math.floor((quoteBottom - quoteTop - quote.height) / 2), left: 80 },
@@ -77,6 +80,7 @@ export async function renderQuoteCard(params: RenderParams) {
   if (rating) layers.push({ input: stars(rating, ink === "#ffffff" ? "#F4B731" : "#9A5A0B"), top: 80, left: 80 });
   if (author) layers.push({ input: author.input, top: authorTop, left: 80 });
   if (logo) layers.push({ input: logo, top: 860, left: 860 });
+  if (watermark) layers.push({ input: watermark.input, top: 1012, left: Math.floor((1080 - watermark.width) / 2) });
   const png = await sharp({ create: { width: 1080, height: 1080, channels: 4, background: primary } }).composite(layers).png().toBuffer();
   return png;
 }

@@ -3,7 +3,18 @@ import { rasterLogo } from "../../../lib/services/logos";
 import { ownerRoute, currentOwner } from "../../../lib/authorization";
 import { NextRequest, NextResponse } from "next/server";
 import { parseBrandColors, parseLogoUrl, validBrandConfig, type BrandTone } from "../../../lib/branding";
-import { query } from "../../../lib/db";
+import { query, transaction } from "../../../lib/db";
+import { entitlementsFor } from "../../../lib/services/entitlements";
+
+type BusinessRow = {
+  id: number;
+  name: string;
+  timezone: string;
+  brand_colors: Record<string, string> | null;
+  logo_url: string | null;
+  brand_tone: BrandTone;
+  weekly_target: number;
+};
 
 function normalizeBrandTone(input: unknown): BrandTone {
   const tone = String(input ?? "friendly").trim().toLowerCase();
@@ -78,23 +89,43 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({ error: "Use a business name of 1–120 characters" }, { status: 400 });
   }
 
-  const result = await query<{
-    id: number;
-    name: string;
-    timezone: string;
-    brand_colors: Record<string, string> | null;
-    logo_url: string | null;
-    brand_tone: BrandTone;
-    weekly_target: number;
-  }>(
-    `INSERT INTO businesses (name, timezone, brand_colors, logo_url, brand_tone, owner_id, onboarding_key)
-     VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
-     ON CONFLICT (owner_id,onboarding_key) WHERE onboarding_key IS NOT NULL DO UPDATE SET name=businesses.name
-     RETURNING id, name, timezone, brand_colors, logo_url, brand_tone`,
-    [name, timezone, JSON.stringify(brandColors), logoUrl, brandTone, currentOwner(), body.onboardingKey ?? null]
-  );
+  const result = await transaction(async (c) => {
+    const owner = currentOwner();
+    // Serialize plan checks and inserts per owner so two concurrent creates
+    // cannot both pass the business limit.
+    await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [owner]);
+    const onboardingKey = typeof body.onboardingKey === "string" ? body.onboardingKey : null;
+    if (onboardingKey) {
+      const existing = await c.query<BusinessRow>(
+        `SELECT id, name, timezone, brand_colors, logo_url, brand_tone, weekly_target
+         FROM businesses WHERE owner_id=$1 AND onboarding_key=$2 LIMIT 1`,
+        [owner, onboardingKey]
+      );
+      // Retrying a lost onboarding response must return the original business,
+      // even when the owner is already at the plan limit.
+      if (existing.rowCount) return { business: existing.rows[0] };
+    }
+    const entitlements = await entitlementsFor(owner, (sql, values) => c.query(sql, values));
+    const count = Number((await c.query<{ n: string }>("SELECT count(*) n FROM businesses WHERE owner_id=$1", [owner])).rows[0].n);
+    if (count >= entitlements.limits.businesses) return { limit: entitlements.limits.businesses };
+    const inserted = await c.query<BusinessRow>(
+      `INSERT INTO businesses (name, timezone, brand_colors, logo_url, brand_tone, owner_id, onboarding_key)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
+       ON CONFLICT (owner_id,onboarding_key) WHERE onboarding_key IS NOT NULL DO UPDATE SET name=businesses.name
+       RETURNING id, name, timezone, brand_colors, logo_url, brand_tone, weekly_target`,
+      [name, timezone, JSON.stringify(brandColors), logoUrl, brandTone, owner, onboardingKey]
+    );
+    return { business: inserted.rows[0] };
+  });
 
-  return NextResponse.json({ business: result.rows[0] }, { status: 201 });
+  if ("limit" in result) {
+    return NextResponse.json({
+      error: `Your plan includes ${result.limit} ${result.limit === 1 ? "business" : "businesses"}; upgrade to add another.`,
+      code: "business_limit_reached"
+    }, { status: 403 });
+  }
+
+  return NextResponse.json({ business: result.business }, { status: 201 });
 }
 
 export const GET = ownerRoute(handleGET);

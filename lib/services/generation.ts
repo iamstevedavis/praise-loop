@@ -5,6 +5,7 @@ import { chargeGeneration } from "../authorization";
 import { selectQuoteCandidates } from "./quoteSelector";
 import { generateCaptionVariants } from "./captions";
 import { renderDraftImage } from "./imageRenderer";
+import { entitlementsFor } from "./entitlements";
 import type { BrandTone } from "../branding";
 export function generationWeek(now: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(now);
@@ -19,13 +20,19 @@ export async function requestGeneration(businessId: number, limit = 5, now = new
     const business = (await c.query("SELECT * FROM businesses WHERE id=$1 AND owner_id IS NOT NULL FOR UPDATE",[businessId])).rows[0];
     if (!business) throw new Error("Owned business required");
     if (!validTimezone(business.timezone)) return { inserted:0, reason:"invalid_timezone", periodStart:null, target:business.weekly_target };
+    // The plan caps the owner's configured weekly target; enforce it inside the
+    // same business lock so a downgrade cannot be raced by a queued request.
+    const entitlements = await entitlementsFor(business.owner_id, (sql,values)=>c.query(sql,values), now);
+    const target = Math.min(business.weekly_target, entitlements.limits.postsPerWeek);
     const week = generationWeek(now,business.timezone);
     await c.query(`INSERT INTO generation_periods(business_id,period_start,timezone,target,allocated,completed)
       SELECT $1,$2,$3,$4,count(*),count(*) FILTER(WHERE caption_text<>'' AND image_path IS NOT NULL)
       FROM draft_posts WHERE business_id=$1 AND duplicate_of IS NULL AND
       (created_at AT TIME ZONE $3)::date >= $2::date AND (created_at AT TIME ZONE $3)::date < $2::date+7
-      ON CONFLICT DO NOTHING`,[businessId,week,business.timezone,business.weekly_target]);
+      ON CONFLICT DO NOTHING`,[businessId,week,business.timezone,target]);
     const period = (await c.query("SELECT * FROM generation_periods WHERE business_id=$1 AND period_start=$2 FOR UPDATE",[businessId,week])).rows[0];
+    // A period created under a different plan still obeys the current cap.
+    const effectiveTarget = Math.min(period.target, target);
     // Adopt existing incomplete drafts from this period; never create replacement records.
     await c.query(`INSERT INTO generation_jobs(business_id,period_start,draft_id,next_at)
       SELECT business_id,$2,id,$3 FROM draft_posts WHERE business_id=$1 AND duplicate_of IS NULL
@@ -33,12 +40,12 @@ export async function requestGeneration(businessId: number, limit = 5, now = new
       AND (created_at AT TIME ZONE $4)::date >= $2::date AND (created_at AT TIME ZONE $4)::date < $2::date+7
       ORDER BY id LIMIT greatest(0,5-(SELECT count(*)::integer FROM generation_jobs WHERE business_id=$1 AND state IN ('pending','retry','running'))) ON CONFLICT(draft_id) DO NOTHING`,[businessId,week,now,business.timezone]);
     const backlog = Number((await c.query("SELECT count(*) n FROM generation_jobs WHERE business_id=$1 AND state IN ('pending','retry','running')",[businessId])).rows[0].n);
-    const count = Math.max(0,Math.min(limit,period.target-period.allocated,5-backlog));
+    const count = Math.max(0,Math.min(limit,effectiveTarget-period.allocated,5-backlog));
     const candidates = count ? await selectQuoteCandidates(businessId,count,(sql,values)=>c.query(sql,values)) : [];
     for (const candidate of candidates) await c.query("INSERT INTO generation_jobs(business_id,period_start,draft_id,next_at) VALUES($1,$2,$3,$4) ON CONFLICT(draft_id) DO NOTHING",[businessId,week,candidate.draftPostId,now]);
-    const reason = backlog >= 5 ? "backlog_full" : period.allocated >= period.target ? "quota_met" : !candidates.length ? "reviews_exhausted" : "queued";
+    const reason = backlog >= 5 ? "backlog_full" : period.allocated >= effectiveTarget ? "quota_met" : !candidates.length ? "reviews_exhausted" : "queued";
     await c.query("UPDATE generation_periods SET allocated=allocated+$3,reason=$4 WHERE business_id=$1 AND period_start=$2",[businessId,week,candidates.length,reason]);
-    return { inserted:candidates.length, reason, periodStart:week, target:period.target };
+    return { inserted:candidates.length, reason, periodStart:week, target:effectiveTarget };
   });
 }
 export type GenerationDeps = { captions: typeof generateCaptionVariants; render: typeof renderDraftImage; clock: () => Date };
@@ -61,9 +68,10 @@ export async function processGeneration(id: number, deps: GenerationDeps = defau
       if (!saved.rowCount) return false;
     }
     if (!row.image_path) {
+      const entitlements = await entitlementsFor(row.owner_id);
       const image = await deps.render({draftPostId:row.id,businessName:row.name,quoteText:row.quote_text,rating:row.rating,authorName:row.author_name,
         brandHex:row.brand_colors.primary,secondaryBrandHex:row.brand_colors.secondary,logoUrl:row.logo_url,
-        brandTone:row.brand_tone,templateConfig:row.brand_colors});
+        brandTone:row.brand_tone,templateConfig:row.brand_colors,watermark:entitlements.limits.watermark});
       const saved = await query("UPDATE draft_posts SET image_path=$2,updated_at=now() WHERE id=$1 AND status IN ('draft','failed') AND EXISTS(SELECT 1 FROM generation_jobs WHERE id=$3 AND lease=$4 AND state='running') RETURNING id",[row.id,image.publicPath,id,lease]);
       if (!saved.rowCount) return false;
     }
