@@ -43,6 +43,12 @@ async function main() {
     assert.equal(edited.updated, 1);
     assert.equal((await c.query("SELECT text FROM reviews WHERE id=$1", [rid])).rows[0].text, "Edited synthetic words");
     assert.equal((await c.query("SELECT quote_text FROM draft_posts WHERE review_id=$1", [rid])).rows[0].quote_text, "Approved quote");
+    // an edit that removes the comment clears the imported text but not the approved draft quote
+    const cleared = await g.syncReviews(fake([[rev(1, { comment: "" })]]).client, a, noSleep);
+    assert.equal(cleared.updated, 1);
+    assert.equal((await c.query("SELECT text FROM reviews WHERE id=$1", [rid])).rows[0].text, "");
+    assert.equal((await c.query("SELECT quote_text FROM draft_posts WHERE review_id=$1", [rid])).rows[0].quote_text, "Approved quote");
+    assert.equal((await g.syncReviews(fake([[rev(777, { comment: "" })]]).client, a, noSleep)).imported, 0, "rating-only reviews are not imported");
     // 429 retries honor Retry-After then succeed; bounded when persistent
     const waits: number[] = [];
     f = fake([[rev(4)]], { list: [new GoogleApiError(429, "rate", 1234)] });
@@ -68,6 +74,13 @@ async function main() {
     const row = (await c.query("SELECT status,encrypted_refresh_token t,last_error_code FROM google_connections WHERE business_id=$1", [a])).rows[0];
     assert.deepEqual([row.status, row.t, row.last_error_code], ["revoked", null, "access_revoked"]);
     assert.equal((await g.syncReviews(fake([[rev(99)]]).client, a, noSleep)).status, "skipped");
+    // a sync that started before a reconnect cannot revoke the new credential
+    await g.connect("g-a", a, loc, "tok-a4");
+    const staleClient = fake([[rev(97)]]).client;
+    staleClient.refreshAccessToken = async () => { await g.connect("g-a", a, loc, "tok-a5"); throw new GoogleApiError(400, "invalid_grant"); };
+    await g.syncReviews(staleClient, a, noSleep);
+    const live = (await c.query("SELECT status,encrypted_refresh_token t FROM google_connections WHERE business_id=$1", [a])).rows[0];
+    assert.equal(live.status, "active"); assert.ok(live.t, "reconnected credential survives a stale failure");
     // disconnect: ownership, revokes at provider, stops sync
     await g.connect("g-a", a, loc, "tok-a3");
     const d = fake([[rev(98)]]);
