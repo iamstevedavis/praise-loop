@@ -69,7 +69,7 @@ No credentials, new dependencies, schema changes or production changes in this P
 
 `lib/integrations/buffer.ts` is a Buffer GraphQL adapter tested only against mocked
 `fetch` (`scripts/test-buffer.ts`). It refuses incomplete drafts and past times before
-any network call, retries only 429 (bounded, Retry-After capped at 60s), maps 401/403
+any network call, retries only 429 (bounded, a Retry-After over 60s is surfaced instead of retried), maps 401/403
 to an auth error, media/GraphQL errors to a rejection, and treats timeout/5xx/unreadable
 responses as `SchedulerAmbiguous` (never auto-resubmitted). Only a returned post id with
 status `scheduled` yields `confirmed: true`. `lib/integrations/credentials.ts` provides

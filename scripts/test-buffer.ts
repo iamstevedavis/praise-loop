@@ -32,6 +32,9 @@ async function main() {
   assert.equal((await t.a.schedulePost(payload)).externalId, "p1"); assert.equal(t.calls.length, 2);
   t = make([429, 429, 429, 429].map(s => new Response("", { status: s })));
   await assert.rejects(t.a.schedulePost(payload), SchedulerRateLimited); assert.equal(t.calls.length, 3);
+  // a Retry-After beyond the 60s cap is reported, not shortened and retried
+  t = make([new Response("", { status: 429, headers: { "retry-after": "753" } }), ok(good)]);
+  await assert.rejects(t.a.schedulePost(payload), (e: unknown) => e instanceof SchedulerRateLimited && e.retryAfterMs === 753000); assert.equal(t.calls.length, 1);
   // timeout after send / 5xx: ambiguous, never resubmitted
   t = make([new Error("timeout"), ok(good)]);
   await assert.rejects(t.a.schedulePost(payload), SchedulerAmbiguous); assert.equal(t.calls.length, 1);
