@@ -53,11 +53,13 @@ export async function enqueuePostsReady(now = new Date()) {
 const removeToken = (token: string) => query("DELETE FROM device_push_tokens WHERE token = $1", [token]);
 
 export async function sendPending(transport: PushTransport, now = new Date()) {
+  // Only devices still registered to the business's owner are claimed: a token that moved to another
+  // owner (shared device) must not receive the previous owner's queued notifications.
   // Claiming bumps attempts and pushes next_at out, so a crash mid-send is retried
   // later (bounded) instead of immediately and never loops forever.
   const claimed = (await query(`UPDATE push_deliveries d SET attempts = attempts + 1, next_at = $1::timestamptz + interval '5 minutes'
     WHERE d.id IN (SELECT d2.id FROM push_deliveries d2 WHERE d2.state IN ('pending','retry') AND d2.next_at <= $1 AND d2.attempts < $2
-      AND EXISTS (SELECT 1 FROM device_push_tokens t WHERE t.token = d2.token) ORDER BY d2.id LIMIT $3 FOR UPDATE SKIP LOCKED)
+      AND EXISTS (SELECT 1 FROM device_push_tokens t JOIN businesses b ON b.id = d2.business_id WHERE t.token = d2.token AND t.owner_id = b.owner_id) ORDER BY d2.id LIMIT $3 FOR UPDATE SKIP LOCKED)
     RETURNING d.id, d.token, d.count, d.attempts, d.business_id`, [now, MAX_ATTEMPTS, BATCH])).rows;
   if (!claimed.length) return { sent: 0, failed: 0 };
   const names = (await query("SELECT id, name FROM businesses WHERE id = ANY($1)", [claimed.map(r => r.business_id)])).rows;
