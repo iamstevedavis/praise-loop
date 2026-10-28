@@ -89,6 +89,15 @@ async function main() {
     assert.equal((await client.query("SELECT count(*) FROM device_push_tokens WHERE token=$1", [A])).rows[0].count, "1");
     assert.equal((await client.query("SELECT count(*) FROM generation_jobs WHERE state='complete'")).rows[0].count, "5");
 
+    // A queued notification is never delivered to a device that has since moved to another owner.
+    const D = "ExponentPushToken[dddddddddddddddddddddd]";
+    await client.query("INSERT INTO device_push_tokens(owner_id,token,platform) VALUES('push-b',$1,'ios')", [D]);
+    await client.query("INSERT INTO push_deliveries(business_id,period_start,token,count) VALUES($1,$2,$3,3)", [ba, week, D]);
+    const moved = fake();
+    await pushTick(moved.transport, new Date(now.getTime() + 24 * 3600000));
+    assert.ok(moved.sent.every(m => m.to !== D || m.data.businessId !== ba), "previous owner's notification must not reach the new owner's device");
+    assert.equal((await client.query("SELECT state FROM push_deliveries WHERE token=$1", [D])).rows[0].state, "pending");
+
     // Tokens are deleted with the owner.
     await client.query("DELETE FROM businesses WHERE owner_id='push-a'"); await client.query("DELETE FROM auth_users WHERE id='push-a'");
     assert.equal((await client.query("SELECT count(*) FROM device_push_tokens WHERE owner_id='push-a'")).rows[0].count, "0");
