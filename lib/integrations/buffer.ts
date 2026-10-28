@@ -16,7 +16,7 @@ export class BufferSchedulerAdapter implements SchedulerAdapter {
     const now = (this.o.now ?? Date.now)(), due = Date.parse(p.scheduledFor);
     if (!p.captionText.trim() || !p.mediaUrl) throw new SchedulerRejected("incomplete draft: caption and provider-fetchable media required");
     if (!Number.isFinite(due) || due <= now) throw new SchedulerRejected("scheduled time must be in the future");
-    const body = JSON.stringify({ query: MUTATION, variables: { input: { channelId: this.o.channelId, text: p.captionText, schedulingType: "automatic", mode: "customScheduled", dueAt: new Date(due).toISOString(), assets: { images: [{ url: p.mediaUrl }] } } } });
+    const body = JSON.stringify({ query: MUTATION, variables: { input: { channelId: this.o.channelId, text: p.captionText, schedulingType: "automatic", mode: "customScheduled", dueAt: new Date(due).toISOString(), assets: [{ image: { url: p.mediaUrl } }] } } });
     const max = this.o.maxRateLimitRetries ?? 2, sleep = this.o.sleep ?? (ms => new Promise(r => setTimeout(r, ms)));
     for (let attempt = 0; ; attempt++) {
       let res: Response;
