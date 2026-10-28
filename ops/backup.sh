@@ -27,7 +27,8 @@ mv "$db.partial" "$db"
 mv "$media.partial" "$media"
 
 # A truncated dump must fail loudly rather than be uploaded as a good backup.
-gzip -t "$db" && tar -tzf "$media" >/dev/null
+gzip -t "$db"
+tar -tzf "$media" >/dev/null
 
 rclone copy "$db" "$BACKUP_REMOTE"
 rclone copy "$media" "$BACKUP_REMOTE"

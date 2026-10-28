@@ -8,9 +8,11 @@ set -euo pipefail
 [ $# -eq 2 ] || { echo "usage: $0 <db-*.sql.gz> <media-*.tar.gz>" >&2; exit 2; }
 db="$(readlink -f "$1")"; media="$(readlink -f "$2")"
 COMPOSE="${COMPOSE:-docker compose}"
-gzip -t "$db" && tar -tzf "$media" >/dev/null
+# Validate both archives before touching anything; separate commands so set -e aborts.
+gzip -t "$db"
+tar -tzf "$media" >/dev/null
 
-$COMPOSE up -d postgres
+$COMPOSE up -d --wait postgres
 $COMPOSE stop web worker >/dev/null 2>&1 || true
 # shellcheck disable=SC2016  # expanded inside the container
 $COMPOSE exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$POSTGRES_DB\" WITH (FORCE)" -c "CREATE DATABASE \"$POSTGRES_DB\""'

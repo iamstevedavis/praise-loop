@@ -52,4 +52,8 @@ assert.match(read(".env.example"), /^CLOUDFLARE_TUNNEL_TOKEN=$/m, "token must be
 for (const f of ["backup.sh", "restore.sh", "healthcheck.sh"]) {
   assert.match(read(`ops/${f}`), /^#!\/usr\/bin\/env bash\nset -euo pipefail|^#!\/usr\/bin\/env bash\n(#.*\n)+set -euo pipefail/, `${f} must fail fast`);
 }
+for (const f of ["backup.sh", "restore.sh"]) {
+  assert.doesNotMatch(read(`ops/${f}`), /gzip -t[^\n]*&&/, `${f} must validate archives as separate commands: set -e ignores the left side of &&`);
+}
+assert.match(read("ops/restore.sh"), /up -d --wait postgres/, "restore must wait for Postgres to be healthy");
 console.log("tooling regression tests passed");
