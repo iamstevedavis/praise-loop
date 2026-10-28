@@ -72,9 +72,11 @@ verifies the RS256 signature against Google's published keys
 every request while neither variable is set (fail closed). It then finds or creates the owner through
 `auth_accounts` (`provider = google`, `provider_account_id = sub`), the same row the web
 uses, so both see the same businesses. A web owner with the same verified email but no
-Google account row is linked instead of duplicated. No Google token is stored or logged.
+Google account row is linked instead of duplicated; if that owner is already linked to a different
+Google subject the sign-in is rejected (401). No Google token is stored or logged.
 Failed attempts are limited to 10 per 15 minutes per client IP (`cf-connecting-ip`, else
-`x-forwarded-for`), counted in process memory: it resets on restart and is per replica,
+`x-forwarded-for`, honoured only when `TRUST_PROXY_HEADERS=1`, which the pilot overlay sets because
+only cloudflared can reach the app; otherwise all callers share one bucket), counted in process memory: it resets on restart and is per replica,
 which suits the single-instance pilot. Move it to Postgres if the web tier is replicated.
 
 Owner steps to create the app's OAuth clients (Google Cloud Console, Google Auth Platform

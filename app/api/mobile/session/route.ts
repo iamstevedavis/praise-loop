@@ -23,13 +23,18 @@ async function readLimited(req: NextRequest, max: number) {
 export async function POST(req: NextRequest) {
   const reply = (status: number, body: object) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
   try {
-    const client = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+    // Client-supplied IP headers are only trustworthy behind a proxy that overwrites them (the pilot's
+    // Cloudflare Tunnel, which sets TRUST_PROXY_HEADERS=1). Otherwise every caller shares one bucket.
+    const trusted = process.env.TRUST_PROXY_HEADERS === "1";
+    const client = trusted ? req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown" : "untrusted";
     if (tooManyFailures(client)) return reply(429, { error: "Too many failed sign-in attempts; try again later" });
     let idToken: unknown;
     try { idToken = JSON.parse(await readLimited(req, 8192))?.idToken; } catch { /* handled below */ }
     const identity = typeof idToken === "string" ? await verifyGoogleIdToken(idToken) : null;
     if (!identity) { recordFailure(client); return reply(401, { error: "Invalid Google sign-in" }); }
-    const session = await createMobileSession(await findOrCreateGoogleOwner(identity));
+    const owner = await findOrCreateGoogleOwner(identity);
+    if (!owner) { recordFailure(client); return reply(401, { error: "Invalid Google sign-in" }); }
+    const session = await createMobileSession(owner);
     return reply(200, { token: session.token, expires: session.expires });
   } catch { return reply(500, { error: "Sign-in failed; retry" }); }
 }

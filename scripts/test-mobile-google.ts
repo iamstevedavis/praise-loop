@@ -9,7 +9,7 @@ const IOS = "ios-client.apps.googleusercontent.com", ANDROID = "android-client.a
 const ISS = "https://accounts.google.com";
 
 async function main() {
-  process.env.GOOGLE_IOS_CLIENT_ID = IOS; process.env.GOOGLE_ANDROID_CLIENT_ID = ANDROID;
+  process.env.TRUST_PROXY_HEADERS = "1"; process.env.GOOGLE_IOS_CLIENT_ID = IOS; process.env.GOOGLE_ANDROID_CLIENT_ID = ANDROID;
   const good = await generateKeyPair("RS256"), other = await generateKeyPair("RS256");
   const jwk: JWK = { ...(await exportJWK(good.publicKey)), kid: "test-key", alg: "RS256", use: "sig" };
   // Mock Google: serve a test key set for the certs URL, refuse any other network call.
@@ -55,6 +55,12 @@ async function main() {
     assert.equal((await exchange(sub2)).status, 200);
     assert.equal((await client.query("SELECT owner_id FROM auth_accounts WHERE provider_account_id='google-sub-2'")).rows[0].owner_id, "web-owner");
 
+    // A different Google subject with an already-linked email is rejected, not linked.
+    const intruder = await new SignJWT({ email: "web@example.invalid", email_verified: true }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
+      .setSubject("google-sub-3").setIssuer(ISS).setAudience(IOS).setIssuedAt().setExpirationTime("1h").sign(good.privateKey);
+    assert.equal((await exchange(intruder)).status, 401);
+    assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider_account_id='google-sub-3'")).rows[0].n, 0);
+
     // Rejections: all 401, no session or owner created.
     const sessionsBefore = (await client.query("SELECT count(*)::int AS n FROM auth_sessions")).rows[0].n;
     const bad: [string, unknown][] = [
@@ -81,6 +87,12 @@ async function main() {
     const big = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(JSON.stringify({ idToken: "x".repeat(20000) }))); c.close(); } });
     const chunked = new NextRequest("http://localhost/api/mobile/session", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.50" }, body: big, duplex: "half" } as ConstructorParameters<typeof NextRequest>[1]);
     assert.equal((await require("../app/api/mobile/session/route").POST(chunked)).status, 401);
+
+    // Without a trusted proxy, spoofed IP headers cannot dodge the limiter: everyone shares one bucket.
+    process.env.TRUST_PROXY_HEADERS = ""; resetFailures();
+    for (let i = 0; i < 10; i++) assert.equal((await exchange("garbage", `192.0.2.${i}`)).status, 401);
+    assert.equal((await exchange("garbage", "192.0.2.200")).status, 429);
+    process.env.TRUST_PROXY_HEADERS = "1"; resetFailures();
 
     // Unconfigured audience list fails closed.
     delete process.env.GOOGLE_IOS_CLIENT_ID; delete process.env.GOOGLE_ANDROID_CLIENT_ID;
