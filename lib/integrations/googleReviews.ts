@@ -102,6 +102,7 @@ export async function syncReviews(client: GoogleReviewsClient, businessId: numbe
     let token = conn.page_checkpoint ?? undefined;
     do {
       const page = await withRetry(() => client.listReviews(access, conn.location_name, token), opts);
+      const pageCounts = { imported: 0, updated: 0 };
       await transaction(async () => {
         // Revalidate under a row lock: a reconnect (new credential) or disconnect while the page was in flight
         // must not import into, or move the checkpoint of, the connection the owner now has.
@@ -113,7 +114,7 @@ export async function syncReviews(client: GoogleReviewsClient, businessId: numbe
             // A rating-only review is not importable, but an edit that removed the comment of an
             // imported review must clear the stale endorsement. Draft snapshots are untouched.
             const cleared = await query("UPDATE reviews SET text='', rating=$3 WHERE business_id=$1 AND source='google' AND source_review_id=$2 AND (text,rating) IS DISTINCT FROM ('',$3)", [businessId, r.reviewId, r.rating]);
-            if (cleared.rowCount) n.updated++;
+            if (cleared.rowCount) pageCounts.updated++;
             continue;
           }
           const res = await query<{ inserted: boolean }>(
@@ -123,10 +124,11 @@ export async function syncReviews(client: GoogleReviewsClient, businessId: numbe
              WHERE (reviews.rating,reviews.text,reviews.author_name) IS DISTINCT FROM (EXCLUDED.rating,EXCLUDED.text,EXCLUDED.author_name)
              RETURNING (xmax = 0) AS inserted`,
             [businessId, r.reviewId, r.rating, r.reviewerName, r.comment, r.createTime]);
-          if (res.rows[0]?.inserted) n.imported++; else if (res.rowCount) n.updated++;
+          if (res.rows[0]?.inserted) pageCounts.imported++; else if (res.rowCount) pageCounts.updated++;
         }
         await query("UPDATE google_connections SET page_checkpoint=$2 WHERE id=$1", [conn.id, page.nextPageToken ?? null]);
       });
+      n.imported += pageCounts.imported; n.updated += pageCounts.updated; // only once the page has committed
       token = page.nextPageToken;
     } while (token);
     await query("UPDATE google_connections SET last_sync_at=now(), last_sync_count=$2, last_error_code=NULL WHERE id=$1", [conn.id, n.imported + n.updated]);
