@@ -85,9 +85,12 @@ export async function syncReviews(client: GoogleReviewsClient, businessId: numbe
   const conn = (await query<{ id: string; owner_id: string; location_name: string; encrypted_refresh_token: string | null; page_checkpoint: string | null }>(
     "SELECT id,owner_id,location_name,encrypted_refresh_token,page_checkpoint FROM google_connections WHERE business_id=$1 AND status='active'", [businessId])).rows[0];
   if (!conn?.encrypted_refresh_token) return { status: "skipped", imported: 0, updated: 0 };
+  // Guarded by the credential this sync started with, so a stale sync cannot revoke or
+  // mark failed a connection the owner reconnected while the request was in flight.
   const fail = async (code: string, status: "revoked" | "failed", n: { imported: number; updated: number }) => {
     await query(`UPDATE google_connections SET last_error_code=$2, status=CASE WHEN $3 THEN 'revoked' ELSE status END,
-      encrypted_refresh_token=CASE WHEN $3 THEN NULL ELSE encrypted_refresh_token END WHERE id=$1`, [conn.id, code, status === "revoked"]);
+      encrypted_refresh_token=CASE WHEN $3 THEN NULL ELSE encrypted_refresh_token END
+      WHERE id=$1 AND encrypted_refresh_token=$4`, [conn.id, code, status === "revoked", conn.encrypted_refresh_token]);
     return { status, errorCode: code, ...n };
   };
   const n = { imported: 0, updated: 0 };
@@ -98,7 +101,14 @@ export async function syncReviews(client: GoogleReviewsClient, businessId: numbe
       const page = await withRetry(() => client.listReviews(access, conn.location_name, token), opts);
       await transaction(async () => {
         for (const r of page.reviews) {
-          if (!r.reviewId || !r.comment?.trim() || !(r.rating >= 1 && r.rating <= 5)) continue;
+          if (!r.reviewId || !(r.rating >= 1 && r.rating <= 5)) continue;
+          if (!r.comment?.trim()) {
+            // A rating-only review is not importable, but an edit that removed the comment of an
+            // imported review must clear the stale endorsement. Draft snapshots are untouched.
+            const cleared = await query("UPDATE reviews SET text='', rating=$3 WHERE business_id=$1 AND source='google' AND source_review_id=$2 AND (text,rating) IS DISTINCT FROM ('',$3)", [businessId, r.reviewId, r.rating]);
+            if (cleared.rowCount) n.updated++;
+            continue;
+          }
           const res = await query<{ inserted: boolean }>(
             `INSERT INTO reviews(business_id,source,source_review_id,rating,author_name,text,reviewed_at)
              VALUES($1,'google',$2,$3,$4,$5,$6)
