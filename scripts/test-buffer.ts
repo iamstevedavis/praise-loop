@@ -42,6 +42,13 @@ async function main() {
   await assert.rejects(t.a.schedulePost(payload), SchedulerAmbiguous); assert.equal(t.calls.length, 1);
   // media failure surfaces as rejection
   await assert.rejects(make([ok({ data: { createPost: { message: "Could not fetch image" } } })]).a.schedulePost(payload), /Could not fetch image/);
+  // GraphQL-level errors are classified by code
+  const gql = (code: string) => ok({ errors: [{ message: "x", extensions: { code } }] });
+  await assert.rejects(make([gql("UNAUTHORIZED")]).a.schedulePost(payload), SchedulerAuthError);
+  await assert.rejects(make([gql("FORBIDDEN")]).a.schedulePost(payload), SchedulerAuthError);
+  await assert.rejects(make([gql("BAD_USER_INPUT")]).a.schedulePost(payload), SchedulerRejected);
+  t = make([gql("UNEXPECTED"), ok(good)]);
+  await assert.rejects(t.a.schedulePost(payload), SchedulerAmbiguous); assert.equal(t.calls.length, 1);
   // non-scheduled status is not a confirmed success
   assert.equal((await make([ok({ data: { createPost: { post: { id: "p2", status: "error" } } } })]).a.schedulePost(payload)).confirmed, false);
   // credentials: round trip, AAD binding, tamper detection

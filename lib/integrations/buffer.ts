@@ -31,11 +31,19 @@ export class BufferSchedulerAdapter implements SchedulerAdapter {
         await sleep(wait); continue;
       }
       if (!res.ok) throw new SchedulerAmbiguous(`HTTP ${res.status}`);
-      let json: { data?: { createPost?: { post?: { id?: string; status?: string }; message?: string } }; errors?: { message?: string }[] };
+      let json: { data?: { createPost?: { post?: { id?: string; status?: string }; message?: string } }; errors?: { message?: string; extensions?: { code?: string } }[] };
       try { json = await res.json(); } catch { throw new SchedulerAmbiguous("unreadable response"); }
       const r = json.data?.createPost;
       if (r?.post?.id) return { provider: "buffer", confirmed: r.post.status === "scheduled", externalId: r.post.id, status: r.post.status === "scheduled" ? "scheduled" : "simulated" };
-      if (json.errors?.length || r?.message) throw new SchedulerRejected((r?.message ?? json.errors?.[0]?.message ?? "error").slice(0, 120));
+      if (r?.message) throw new SchedulerRejected(r.message.slice(0, 120));
+      if (json.errors?.length) {
+        // GraphQL-level errors: only input/validation codes prove nothing was scheduled. Auth failures map to
+        // the auth error; anything else (e.g. UNEXPECTED) may have had side effects, so it stays ambiguous.
+        const codes = json.errors.map(e => e.extensions?.code ?? "");
+        if (codes.some(c => c === "UNAUTHORIZED" || c === "FORBIDDEN")) throw new SchedulerAuthError();
+        if (codes.every(c => c === "BAD_USER_INPUT" || c === "GRAPHQL_VALIDATION_FAILED")) throw new SchedulerRejected((json.errors[0].message ?? "error").slice(0, 120));
+        throw new SchedulerAmbiguous(`GraphQL error ${codes[0] || "unknown"}`);
+      }
       throw new SchedulerAmbiguous("response without post id");
     }
   }
