@@ -31,8 +31,9 @@ export async function requestGeneration(businessId: number, limit = 5, now = new
       (created_at AT TIME ZONE $3)::date >= $2::date AND (created_at AT TIME ZONE $3)::date < $2::date+7
       ON CONFLICT DO NOTHING`,[businessId,week,business.timezone,target]);
     const period = (await c.query("SELECT * FROM generation_periods WHERE business_id=$1 AND period_start=$2 FOR UPDATE",[businessId,week])).rows[0];
-    // A period created under a different plan still obeys the current cap.
-    const effectiveTarget = Math.min(period.target, target);
+    // The cap follows the current plan both ways: a downgrade lowers an existing period and an
+    // upgrade raises it, so a new Pro owner is not stuck at the Free allowance until next week.
+    const effectiveTarget = target;
     // Adopt existing incomplete drafts from this period; never create replacement records.
     await c.query(`INSERT INTO generation_jobs(business_id,period_start,draft_id,next_at)
       SELECT business_id,$2,id,$3 FROM draft_posts WHERE business_id=$1 AND duplicate_of IS NULL
@@ -44,7 +45,7 @@ export async function requestGeneration(businessId: number, limit = 5, now = new
     const candidates = count ? await selectQuoteCandidates(businessId,count,(sql,values)=>c.query(sql,values)) : [];
     for (const candidate of candidates) await c.query("INSERT INTO generation_jobs(business_id,period_start,draft_id,next_at) VALUES($1,$2,$3,$4) ON CONFLICT(draft_id) DO NOTHING",[businessId,week,candidate.draftPostId,now]);
     const reason = backlog >= 5 ? "backlog_full" : period.allocated >= effectiveTarget ? "quota_met" : !candidates.length ? "reviews_exhausted" : "queued";
-    await c.query("UPDATE generation_periods SET allocated=allocated+$3,reason=$4 WHERE business_id=$1 AND period_start=$2",[businessId,week,candidates.length,reason]);
+    await c.query("UPDATE generation_periods SET allocated=allocated+$3,reason=$4,target=$5 WHERE business_id=$1 AND period_start=$2",[businessId,week,candidates.length,reason,effectiveTarget]);
     return { inserted:candidates.length, reason, periodStart:week, target:effectiveTarget };
   });
 }
