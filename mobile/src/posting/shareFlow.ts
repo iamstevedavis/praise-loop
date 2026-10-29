@@ -35,7 +35,10 @@ export async function prepareShare(draft: Draft, deps: ShareDeps): Promise<Share
   let uri: string;
   try {
     uri = await deps.downloadImage(draft);
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === "signedOut") {
+      return { step: "error", message: "Your session ended. Sign in again.", reason: "signedOut" };
+    }
     return { step: "error", message: "Couldn't save the image. Check your connection and try again." };
   }
 

@@ -65,6 +65,12 @@ describe("share flow", () => {
     expect(calls).toEqual([]);
   });
 
+  it("flags an expired session when the image download is rejected", async () => {
+    const { state, calls } = await prepared({ downloadImage: async () => { throw new ApiError("signedOut", 401); } });
+    expect(state).toMatchObject({ step: "error", reason: "signedOut", message: expect.stringMatching(/sign in/i) });
+    expect(calls).toEqual([]);
+  });
+
   it("cleans up the cached image when the caption copy fails", async () => {
     const { state, calls } = await prepared({ copyCaption: async () => { throw new Error("clipboard"); } });
     expect(state).toMatchObject({ step: "error", message: expect.stringMatching(/caption/i) });

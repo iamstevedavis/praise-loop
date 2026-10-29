@@ -183,11 +183,12 @@ export default function DraftScreen() {
       // There is no modal for preparation failures, so surface them in the banner
       // instead of dropping back to an unexplained idle button.
       setNotice({ tone: "danger", message: next.message });
+      if (next.reason === "signedOut") expire();
       setShare({ step: "idle" });
       return;
     }
     setShare(next);
-  }, [busy, caption, draft, shareBusy, shareDeps]);
+  }, [busy, caption, draft, expire, shareBusy, shareDeps]);
 
   const confirmPost = useCallback(async () => {
     if (share.step !== "confirm") return;
