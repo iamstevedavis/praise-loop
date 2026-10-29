@@ -21,6 +21,12 @@ export type ShareState =
 
 export const SHARED_HINT = "Caption copied — paste it in Instagram";
 
+// Shown next to the Post button, before the share sheet takes over. Instagram
+// ignores the caption another app puts on the clipboard, so the owner has to be
+// told to paste it while composing - the confirmation modal opens too late for
+// that.
+export const PASTE_HINT = "Posting copies the caption and opens the share sheet. Paste it into Instagram before you publish.";
+
 // Save the PNG, copy the caption and open the share sheet. Instagram does not
 // accept caption text from other apps, so the copy is a separate, explicit step.
 // A cancelled share cannot be detected, which is why the owner is asked instead.
