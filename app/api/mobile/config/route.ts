@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { devAuthEnabled } from "../../../../lib/devAuth";
 
 // Public, owner-free configuration for installed apps. Keep this response small
 // and cacheable: the app calls it on launch to decide whether it can continue.
@@ -24,7 +25,10 @@ export async function GET() {
     {
       minimumVersion,
       latestVersion: version("MOBILE_LATEST_VERSION", minimumVersion),
-      features: features()
+      features: features(),
+      // Only true for a development process with MOBILE_DEV_AUTH=1; the app uses it
+      // to show the demo sign-in button. Production builds always report false.
+      devAuth: devAuthEnabled()
     },
     { headers: { "Cache-Control": "public, max-age=60, s-maxage=300" } }
   );

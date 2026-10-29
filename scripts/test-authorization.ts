@@ -12,8 +12,9 @@ function files(dir: string): string[] { return readdirSync(dir, { withFileTypes:
 async function main() {
   process.env.NEXTAUTH_URL = "http://localhost";
   // Exercise every actual API export anonymously, including future additions (fail closed).
-  // The mobile config route is the one intentional public exception (#82).
-  const publicRoutes = new Set(["app/api/mobile/config/route.ts"]);
+  // The mobile config route is public by design (#82); the demo sign-in route answers 404
+  // unless a development process enables it, so it is checked separately below.
+  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/dev/route.ts"]);
   for (const file of files("app/api").filter(f => !f.includes("/auth/") && !publicRoutes.has(f))) {
     const route = require(join("..",file));
     const path = "/" + file.replace(/\/route.ts$/, "").replace("[id]", "999999").replace("[name]", "draft-999999.png");
@@ -26,15 +27,18 @@ async function main() {
   assert.equal(defaultConfig.status, 200);
   assert.equal(defaultConfig.headers.get("set-cookie"), null);
   assert.match(defaultConfig.headers.get("cache-control") ?? "", /max-age=60/);
-  assert.deepEqual(await defaultConfig.json(), { minimumVersion: "1.0.0", latestVersion: "1.0.0", features: [] });
+  assert.deepEqual(await defaultConfig.json(), { minimumVersion: "1.0.0", latestVersion: "1.0.0", features: [], devAuth: false });
+  // Demo sign-in stays hidden unless a development process opts in.
+  const devRoute = require("../app/api/mobile/session/dev/route");
+  assert.equal((await devRoute.POST()).status, 404, "demo sign-in must be missing without MOBILE_DEV_AUTH");
   process.env.MOBILE_MINIMUM_VERSION = "1.2.0";
   process.env.MOBILE_LATEST_VERSION = "1.4.0";
   process.env.MOBILE_FEATURES = "queue, sharing, Not Valid,queue,";
-  assert.deepEqual(await (await config(new NextRequest("http://localhost/api/mobile/config"))).json(), { minimumVersion: "1.2.0", latestVersion: "1.4.0", features: ["queue", "sharing"] });
+  assert.deepEqual(await (await config(new NextRequest("http://localhost/api/mobile/config"))).json(), { minimumVersion: "1.2.0", latestVersion: "1.4.0", features: ["queue", "sharing"], devAuth: false });
   delete process.env.MOBILE_LATEST_VERSION;
   delete process.env.MOBILE_FEATURES;
   process.env.MOBILE_MINIMUM_VERSION = "not-a-version";
-  assert.deepEqual(await (await config(new NextRequest("http://localhost/api/mobile/config"))).json(), { minimumVersion: "1.0.0", latestVersion: "1.0.0", features: [] });
+  assert.deepEqual(await (await config(new NextRequest("http://localhost/api/mobile/config"))).json(), { minimumVersion: "1.0.0", latestVersion: "1.0.0", features: [], devAuth: false });
   delete process.env.MOBILE_MINIMUM_VERSION;
   await databaseFixture(async client => {
     const create = authAdapter.createUser as (u: Omit<AdapterUser,"id">) => Promise<AdapterUser>;
