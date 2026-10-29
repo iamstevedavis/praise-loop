@@ -220,7 +220,8 @@ async function openRouterTest() {
     // The model comes only from the setting; the request is a chat completion with bearer auth.
     let seen: { url: string; auth: string | undefined; model: string; prompt: string } | null = null;
     stubFetch(async (url, init) => {
-      const body = JSON.parse(String(init.body)) as { model: string; messages: { content: string }[] };
+      const body = JSON.parse(String(init.body)) as { model: string; messages: { content: string }[]; reasoning?: { enabled?: boolean } };
+      assert.deepEqual(body.reasoning, { enabled: false }, "reasoning is disabled so thinking models cannot exhaust the token budget");
       seen = { url: String(url), auth: init.headers?.authorization, model: body.model, prompt: body.messages[0].content };
       return chatResponse(JSON.stringify(CAPTIONS));
     });
