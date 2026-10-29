@@ -4,6 +4,7 @@ export type QueueSections = {
   awaiting: Draft[];
   making: Draft[];
   approved: Draft[];
+  scheduled: Draft[];
   shared: Draft[];
   archived: Draft[];
   failed: Draft[];
@@ -23,7 +24,7 @@ const ACTIVE_STATES = new Set(["pending", "running", "retry"]);
 // Pure shaping of the queue response so every list state can be tested without a
 // renderer. The server already orders drafts newest first.
 export function buildQueue(drafts: Draft[], generation: GenerationSnapshot | null): QueueView {
-  const sections: QueueSections = { awaiting: [], making: [], approved: [], shared: [], archived: [], failed: [] };
+  const sections: QueueSections = { awaiting: [], making: [], approved: [], scheduled: [], shared: [], archived: [], failed: [] };
   for (const draft of drafts) {
     const jobState = draft.job_state ?? "";
     // Mirrors the web queue's stageOf(): a `draft` row is not reviewable until
@@ -31,6 +32,7 @@ export function buildQueue(drafts: Draft[], generation: GenerationSnapshot | nul
     // rejects edits while a job is pending/running/retrying.
     if (draft.status === "archived") sections.archived.push(draft);
     else if (draft.status === "shared") sections.shared.push(draft);
+    else if (draft.status === "scheduled" || draft.status === "published") sections.scheduled.push(draft);
     else if (ACTIVE_STATES.has(jobState)) sections.making.push(draft);
     else if (draft.status === "failed" || jobState === "failed") sections.failed.push(draft);
     else if (draft.status === "approved") sections.approved.push(draft);
@@ -61,6 +63,7 @@ export function queueHeadline(view: QueueView, generating: boolean): string {
   }
   if (generating) return "This week's posts are still being made";
   if (view.approved.length > 0) return "Ready to post";
+  if (view.scheduled.length > 0) return "This week is scheduled";
   if (view.shared.length > 0) return "This week is posted";
   if (view.reviewsExhausted) return "No more reviews to post this week";
   return "No posts this week yet";
@@ -74,7 +77,7 @@ export function isGenerating(view: QueueView): boolean {
 
 export function queueEmptyMessage(view: QueueView): string {
   if (view.making.length > 0) return "";
-  if (view.awaiting.length + view.approved.length + view.shared.length === 0) {
+  if (view.awaiting.length + view.approved.length + view.scheduled.length + view.shared.length === 0) {
     if (view.reviewsExhausted) {
       return "Every review for this week already has a post. New posts appear when more reviews arrive, or import reviews on the web app.";
     }

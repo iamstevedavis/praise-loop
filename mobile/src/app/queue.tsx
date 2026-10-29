@@ -235,6 +235,12 @@ export default function QueueScreen() {
               </Section>
             ) : null}
 
+            {view.scheduled.length > 0 ? (
+              <Section title="Scheduled" hint="Scheduled on the web app. They are read-only here.">
+                {view.scheduled.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+              </Section>
+            ) : null}
+
             {view.shared.length > 0 ? (
               <Section title="Shared" hint="Owner-reported, so these are not claimed as verified publications.">
                 {view.shared.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
