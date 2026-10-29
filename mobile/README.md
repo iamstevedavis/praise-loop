@@ -31,11 +31,14 @@ API URL (development falls back to `http://localhost:3000`). Preview and product
 builds must set `EXPO_PUBLIC_API_BASE_URL`; there is no hard-coded secret, and the
 app only talks to our API.
 
-The app has a launch gate driven by `GET /api/mobile/config` (minimum version and
-the update screen) and a sign-in screen (`#85`). A session token lives in the
-platform keychain (`expo-secure-store`), and the API client sends it as a bearer
-token; a 401 clears the keychain and returns to sign-in. The weekly queue (`#86`)
-and the share-sheet flow (`#87`) follow.
+The app has a launch gate driven by `GET /api/mobile/config`, sign-in (`#85`) and
+the weekly queue (`#86`). A session token lives in the platform keychain
+(`expo-secure-store`), and the API client sends it as a bearer token; a 401 clears
+the keychain and returns to sign-in. The queue lists each business's drafts as
+ready to review, needs attention, approved or shared, with generation progress
+from `GET /api/generation`. Thumbnails are fetched with the bearer token, so media
+stays owner-protected, and the last loaded queue stays visible (read-only) when
+the network drops. The share-sheet flow (`#87`) follows.
 
 Google sign-in is the production path (`#81`). On a development server started with
 `MOBILE_DEV_AUTH=1`, the app also offers **Sign in as demo owner**, which mints a
@@ -47,7 +50,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
 The route answers 404 in production builds, so the flag can never mint sessions on
-a shared server. Until there is seeded data, sign-in lands on a confirmation screen.
+a shared server. Without seeded drafts the queue shows its empty state; `#87` adds
+`npm run dev:seed`.
 
 ## Checks
 
@@ -58,8 +62,9 @@ npm test
 ```
 
 CI runs the same commands in the `mobile` job. Tests cover the API client's error
-mapping (401/409/429/network/timeout), the version gate, the demo-sign-in flag and
-the keychain session store.
+mapping (401/409/429/network/timeout), the version gate, the demo-sign-in flag,
+the keychain session store, draft/bigint normalisation, queue grouping and
+generation progress.
 
 ## Builds
 
