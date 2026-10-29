@@ -147,6 +147,9 @@ export default function DraftScreen() {
   }
 
   const readOnly = draft.status === "shared" || draft.status === "archived";
+  // A mutation always answers with the server's caption, so the editor must not
+  // accept text that the pending response would overwrite.
+  const locked = readOnly || busy !== null;
   const problem = captionProblem(caption);
   const canApprove = draft.status === "draft" && !problem && !!draft.image_path;
 
@@ -178,10 +181,10 @@ export default function DraftScreen() {
 
         <Text style={styles.label}>Caption</Text>
         <TextInput
-          style={[styles.input, readOnly && styles.inputReadOnly]}
+          style={[styles.input, locked && styles.inputReadOnly]}
           value={caption}
           onChangeText={setCaption}
-          editable={!readOnly}
+          editable={!locked}
           multiline
           autoCapitalize="sentences"
           accessibilityLabel="Caption"

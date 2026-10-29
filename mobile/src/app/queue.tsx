@@ -190,7 +190,7 @@ export default function QueueScreen() {
                 <Text style={styles.progress}>
                   {generating
                     ? `Making ${view.progress.completed} of ${view.progress.target} posts…`
-                    : `${view.progress.target} ${view.progress.target === 1 ? "post" : "posts"} this week`}
+                    : `${view.progress.completed} of ${view.progress.target} posts this week`}
                 </Text>
               ) : null}
             </View>
