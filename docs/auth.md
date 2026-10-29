@@ -99,3 +99,10 @@ finished with drafts awaiting approval, the worker sends each of that owner's de
 notification (count, business name and a `praiseloop://queue?businessId=` deep link only),
 recorded in `push_deliveries` so restarts never resend. Tokens Expo reports as
 `DeviceNotRegistered`, in a ticket or a receipt, are deleted. Sends are retried up to three times.
+
+Demo sign-in (development only): `POST /api/mobile/session/dev` mints a normal
+bearer session for the fixed `dev-owner` row, with no Google token. It exists only
+when `MOBILE_DEV_AUTH=1` **and** the process is not a production build; otherwise it
+returns 404 exactly like an unknown route. The demo owner has the same ownership
+checks, version conflicts and audit events as a real owner; never enable the flag on
+a shared server. Production sign-in remains the Google exchange above.

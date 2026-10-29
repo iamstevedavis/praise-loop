@@ -9,7 +9,7 @@ import { appConfig } from "../config";
 type Gate = { status: "loading" } | { status: "ready" } | { status: "update" } | { status: "error"; message: string };
 
 // Launch gate: the version check comes first, then the session decides whether
-// the owner lands on sign-in or the week's queue.
+// the owner lands on sign-in or the signed-in confirmation.
 export default function HomeScreen() {
   const { status } = useSession();
   const [gate, setGate] = useState<Gate>({ status: "loading" });
@@ -59,7 +59,15 @@ export default function HomeScreen() {
     );
   }
 
-  return <Redirect href={status === "signedIn" ? "/queue" : "/sign-in"} />;
+  if (status === "signedOut") return <Redirect href="/sign-in" />;
+
+  // The queue screen lands with #86; until then this confirms the session works.
+  return (
+    <View style={styles.screen}>
+      <Text style={styles.title}>You’re signed in</Text>
+      <Text style={styles.muted}>The weekly queue arrives with the next update.</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
