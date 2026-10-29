@@ -53,6 +53,9 @@ export default function DraftScreen() {
   const [busy, setBusy] = useState<"caption" | "approve" | "archive" | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "danger"; message: string } | null>(null);
   const [share, setShare] = useState<ShareState>({ step: "idle" });
+  // Mutations and the share flow both carry a draft version, and a caption save
+  // resets an approved post to draft. They must never overlap.
+  const shareBusy = share.step === "preparing" || share.step === "saving";
 
   const fetchDraft = useCallback(async () => {
     const drafts = await listDrafts(api, businessId);
@@ -91,6 +94,9 @@ export default function DraftScreen() {
     // mutation's response with the older caption, status and version.
     if (busy) return;
     setLoading(true);
+    // A failed confirmation leaves its draft snapshot behind; a reload means the
+    // owner wants the server's version, not a retry against the stale one.
+    setShare({ step: "idle" });
     try {
       applyFetched(await fetchDraft());
     } catch (error) {
@@ -107,7 +113,7 @@ export default function DraftScreen() {
   }, []);
 
   const save = useCallback(async () => {
-    if (!draft) return;
+    if (!draft || busy || shareBusy) return;
     const problem = captionProblem(caption);
     if (problem) {
       setNotice({ tone: "warning", message: problem });
@@ -124,10 +130,10 @@ export default function DraftScreen() {
     } finally {
       setBusy(null);
     }
-  }, [applyUpdate, caption, draft, handleError]);
+  }, [applyUpdate, busy, caption, draft, handleError, shareBusy]);
 
   const changeStatus = useCallback(async (next: "approved" | "archived") => {
-    if (!draft) return;
+    if (!draft || busy || shareBusy) return;
     setBusy(next === "approved" ? "approve" : "archive");
     setNotice(null);
     try {
@@ -152,7 +158,7 @@ export default function DraftScreen() {
     } finally {
       setBusy(null);
     }
-  }, [applyUpdate, caption, draft, handleError]);
+  }, [applyUpdate, busy, caption, draft, handleError, shareBusy]);
 
   const shareDeps = useCallback((): ShareDeps => ({
     canShare: () => Sharing.isAvailableAsync(),
@@ -164,7 +170,7 @@ export default function DraftScreen() {
   }), [token]);
 
   const post = useCallback(async () => {
-    if (!draft) return;
+    if (!draft || busy || shareBusy) return;
     if (caption.trim() !== draft.caption_text.trim()) {
       setNotice({ tone: "warning", message: "Save your caption changes, then approve this post again before sharing." });
       return;
@@ -180,7 +186,7 @@ export default function DraftScreen() {
       return;
     }
     setShare(next);
-  }, [draft, shareDeps]);
+  }, [busy, caption, draft, shareBusy, shareDeps]);
 
   const confirmPost = useCallback(async () => {
     if (share.step !== "confirm") return;
@@ -190,7 +196,17 @@ export default function DraftScreen() {
     if (next.step === "done") applyUpdate(next.draft, "Marked as shared. Thanks for posting.");
     if (next.step === "error") {
       setNotice({ tone: "danger", message: next.message });
-      if (next.reason === "signedOut") expire();
+      if (next.reason === "signedOut") {
+        expire();
+        setShare({ step: "idle" });
+      } else if (next.reason === "conflict") {
+        // This screen's snapshot is stale, so retrying here cannot succeed.
+        setShare({ step: "idle" });
+      } else {
+        // The post is already out. Keep the confirmation open so the owner can
+        // retry recording it without opening the share sheet again.
+        setShare({ step: "confirm", draft: share.draft });
+      }
     }
   }, [applyUpdate, expire, share, shareDeps]);
 
@@ -218,7 +234,7 @@ export default function DraftScreen() {
   const readOnly = draft.status === "shared" || draft.status === "archived" || draft.status === "scheduled" || draft.status === "published";
   // A mutation always answers with the server's caption, so the editor must not
   // accept text that the pending response would overwrite.
-  const locked = readOnly || busy !== null || share.step !== "idle";
+  const locked = readOnly || busy !== null || shareBusy;
   const problem = captionProblem(caption);
   const canApprove = draft.status === "draft" && !problem && !!draft.image_path;
   const preparing = share.step === "preparing";
@@ -275,7 +291,7 @@ export default function DraftScreen() {
           />
         ) : (
           <View style={styles.actions}>
-            <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={readOnly || !!busy} />
+            <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={readOnly || !!busy || shareBusy} />
             {draft.status === "draft" ? (
               <>
                 <Button label="Approve" onPress={() => { void changeStatus("approved"); }} loading={busy === "approve"} disabled={!canApprove || !!busy} />
@@ -284,7 +300,7 @@ export default function DraftScreen() {
             ) : null}
             {draft.status === "approved" ? (
               <>
-                <Button label={preparing ? "Preparing…" : "Post"} onPress={() => { void post(); }} loading={preparing} disabled={captionDirty} />
+                <Button label={preparing ? "Preparing…" : "Post"} onPress={() => { void post(); }} loading={preparing} disabled={captionDirty || !!busy} />
                 {captionDirty ? <Text style={styles.hint}>Save your caption changes, then approve this post again before sharing it.</Text> : null}
               </>
             ) : null}
@@ -298,6 +314,7 @@ export default function DraftScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Did you post it?</Text>
             <Text style={styles.modalBody}>{SHARED_HINT}. We only record what you tell us; nothing is detected automatically.</Text>
+            {share.step === "confirm" && notice?.tone === "danger" ? <Text style={styles.modalBody}>{notice.message}</Text> : null}
             <Button label="Yes, mark as shared" onPress={() => { void confirmPost(); }} loading={share.step === "saving"} />
             <Button label="Not yet" kind="secondary" onPress={() => setShare(declineShared())} />
           </View>
