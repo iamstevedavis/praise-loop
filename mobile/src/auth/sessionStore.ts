@@ -21,8 +21,11 @@ export function createSessionStore(storage: SecureStorage) {
     },
     async save(token: string): Promise<void> {
       if (!token) throw new Error("A session token is required");
-      cached = token;
+      // Publish the token only once it is durable. If the keychain write fails,
+      // the in-memory token must not be used by the API client while the app
+      // reports a failed sign-in and cannot restore that session on launch.
       await storage.setItemAsync(SESSION_TOKEN_KEY, token);
+      cached = token;
     },
     async clear(): Promise<void> {
       cached = null;
