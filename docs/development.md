@@ -58,7 +58,8 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `DATABASE_URL` | yes (host exec) | Host execution connects to `...@localhost:5432/...`; Compose services build their own URL from `POSTGRES_*` via the `postgres` service name |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | yes (containers) | Defaults in `.env.example`; do not rename the database/volumes (data lives there) |
 | `OPENAI_API_KEY` | no | Enables caption generation; without it the worker marks affected drafts `failed` with an actionable error instead of crashing |
-| `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`); on timeout the draft is marked `failed` with an actionable error |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | no | Caption generation through [OpenRouter](https://openrouter.ai) when `OPENAI_API_KEY` is unset (OpenAI wins if both are set). `OPENROUTER_MODEL` is required with the key and has no default: pick an id at openrouter.ai/models (ids ending in `:free` cost nothing but are rate limited, roughly 20 requests/minute and 50/day on a free account, and some providers log prompts, which contain reviewer quotes). Weaker models fail the JSON/length checks more often; those drafts are marked `failed` and can be retried |
+| `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`, applies to either provider); on timeout the draft is marked `failed` with an actionable error |
 | `DRAFT_PIPELINE_INTERVAL_MS` | no | Worker sweep interval (default `60000`) |
 | `EXPO_ACCESS_TOKEN` | no | Expo push access token; only needed if enhanced push security is enabled on the Expo project |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |

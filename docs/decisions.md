@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-10-28
+  Decision: Allow OpenRouter as the caption provider, with the model supplied only by `OPENROUTER_MODEL`
+  Why: The pilot has no OpenAI or Anthropic key and wants to start on OpenRouter's free models. It speaks the OpenAI chat-completions shape, so it is a second branch inside the existing `fetch` caller with no new dependency. The model is a required setting with no default because free model ids change and a guessed id would fail in production; without it nothing is sent. OpenAI keeps priority when both keys are set, so existing deployments are unchanged. Free models are rate limited and may log prompts (reviewer quotes), so use real customer reviews only after checking the chosen model's data policy.
+
 - Date: 2026-10-27
   Decision: Send "posts ready" notifications through the Expo push HTTP API with `fetch`, not `expo-server-sdk`, and record each send in `push_deliveries` (#88)
   Why: Only two endpoints (send, getReceipts) are needed, so a plain, timeout-bounded `fetch` avoids a new dependency. A unique `(business_id, period_start, token)` delivery row makes one send per device per weekly period survive worker restarts; attempts are capped at three. Tokens reported as `DeviceNotRegistered` (by ticket or receipt) are deleted. Payloads carry only a count, the business name and a `praiseloop://queue` deep link. The transport is injectable so tests never call Expo.
