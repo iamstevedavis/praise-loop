@@ -118,6 +118,14 @@ describe("queue shaping", () => {
     expect(queueHeadline(view, isGenerating(view))).toBe("No posts this week yet");
   });
 
+  it("keeps scheduled and published posts visible instead of reporting an empty week", () => {
+    const view = buildQueue([draft(2, "scheduled"), draft(1, "published")], generation(4, 2));
+    expect(view.scheduled.map(item => item.id)).toEqual([2, 1]);
+    expect(view.awaiting).toEqual([]);
+    expect(queueHeadline(view, isGenerating(view))).toBe("This week is scheduled");
+    expect(queueEmptyMessage(view)).toBe("");
+  });
+
   it("puts reviewable posts first in the headline, then progress, then the empty state", () => {
     expect(queueHeadline(buildQueue([draft(1, "draft"), draft(2, "draft")], null), false)).toBe("2 posts are ready to review");
     expect(queueHeadline(buildQueue([draft(1, "draft")], null), false)).toBe("1 post is ready to review");

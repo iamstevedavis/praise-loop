@@ -168,7 +168,7 @@ export default function DraftScreen() {
     );
   }
 
-  const readOnly = draft.status === "shared" || draft.status === "archived";
+  const readOnly = draft.status === "shared" || draft.status === "archived" || draft.status === "scheduled" || draft.status === "published";
   // A mutation always answers with the server's caption, so the editor must not
   // accept text that the pending response would overwrite.
   const locked = readOnly || busy !== null;
@@ -215,20 +215,24 @@ export default function DraftScreen() {
         <Text style={[styles.counter, (caption.trim().length > 200) && styles.counterOver]}>{caption.trim().length}/200</Text>
 
         {readOnly ? (
-          <Banner message="This post is read-only, so its caption and status can't be changed." />
+          <Banner
+            message={draft.status === "scheduled" || draft.status === "published"
+              ? "Scheduled posts are managed on the web app, so they are read-only here."
+              : "This post is read-only, so its caption and status can't be changed."}
+          />
         ) : (
           <View style={styles.actions}>
             <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={!!busy} />
             {draft.status === "draft" ? (
               <>
                 <Button label="Approve" onPress={() => { void changeStatus("approved"); }} loading={busy === "approve"} disabled={!canApprove || !!busy} />
-                <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy} />
                 {!canApprove ? <Text style={styles.hint}>{problem ?? "A post needs an image before it can be approved."}</Text> : null}
               </>
             ) : null}
             {draft.status === "approved" ? (
               <Text style={styles.hint}>Approved drafts are posted from the next app update.</Text>
             ) : null}
+            <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy} />
           </View>
         )}
       </ScrollView>
