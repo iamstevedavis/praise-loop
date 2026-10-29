@@ -5,6 +5,8 @@ on:
     branches: [master]
     tags: ["v*"]
   pull_request:
+  # Required for the merge queue: queued PRs are tested as a merge group.
+  merge_group:
 
 permissions:
   contents: read
