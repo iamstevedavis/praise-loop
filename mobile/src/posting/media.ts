@@ -1,4 +1,5 @@
 import { File, Paths } from "expo-file-system";
+import { ApiError } from "../api/client";
 import { appConfig } from "../config";
 
 export function absoluteMediaUrl(baseUrl: string, imagePath: string): string {
@@ -18,11 +19,21 @@ type DownloadOptions = {
 // made public for a provider to fetch.
 export async function downloadDraftImage({ baseUrl = appConfig.apiBaseUrl, token, draftId, imagePath }: DownloadOptions): Promise<string> {
   const target = new File(Paths.cache, `praiseloop-draft-${draftId}.png`);
-  const file = await File.downloadFileAsync(absoluteMediaUrl(baseUrl, imagePath), target, {
-    headers: { authorization: `Bearer ${token}` },
-    idempotent: true
-  });
-  return file.uri;
+  try {
+    const file = await File.downloadFileAsync(absoluteMediaUrl(baseUrl, imagePath), target, {
+      headers: { authorization: `Bearer ${token}` },
+      idempotent: true
+    });
+    return file.uri;
+  } catch (error) {
+    // expo-file-system reports a non-2xx as "HTTP 401" / "response has status:
+    // 401". Surface an expired session as such so the app can return to sign-in
+    // instead of suggesting the owner check their connection.
+    if (/\b401\b/.test(error instanceof Error ? error.message : String(error))) {
+      throw new ApiError("signedOut", 401);
+    }
+    throw error;
+  }
 }
 
 export async function discardDraftImage(uri: string): Promise<void> {
