@@ -28,7 +28,7 @@ export default function SignInScreen() {
     setError(null);
     try {
       await signInDemo();
-      router.replace("/queue");
+      router.replace("/");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Demo sign-in failed.");
     } finally {
@@ -36,7 +36,7 @@ export default function SignInScreen() {
     }
   }, [signInDemo]);
 
-  if (status === "signedIn") return <Redirect href="/queue" />;
+  if (status === "signedIn") return <Redirect href="/" />;
 
   return (
     <ScrollView contentContainerStyle={styles.screen}>

@@ -31,9 +31,23 @@ API URL (development falls back to `http://localhost:3000`). Preview and product
 builds must set `EXPO_PUBLIC_API_BASE_URL`; there is no hard-coded secret, and the
 app only talks to our API.
 
-The current screens are a placeholder home and an "update required" screen driven
-by `GET /api/mobile/config`. Sign-in (#85), the approval queue (#86) and the share
-sheet (#87) follow.
+The app has a launch gate driven by `GET /api/mobile/config` (minimum version and
+the update screen) and a sign-in screen (`#85`). A session token lives in the
+platform keychain (`expo-secure-store`), and the API client sends it as a bearer
+token; a 401 clears the keychain and returns to sign-in. The weekly queue (`#86`)
+and the share-sheet flow (`#87`) follow.
+
+Google sign-in is the production path (`#81`). On a development server started with
+`MOBILE_DEV_AUTH=1`, the app also offers **Sign in as demo owner**, which mints a
+session for a fixed synthetic owner without Google:
+
+```bash
+# repo root: set MOBILE_DEV_AUTH=1 in .env
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+The route answers 404 in production builds, so the flag can never mint sessions on
+a shared server. Until there is seeded data, sign-in lands on a confirmation screen.
 
 ## Checks
 
@@ -44,7 +58,8 @@ npm test
 ```
 
 CI runs the same commands in the `mobile` job. Tests cover the API client's error
-mapping (401/409/429/network/timeout) and the version gate.
+mapping (401/409/429/network/timeout), the version gate, the demo-sign-in flag and
+the keychain session store.
 
 ## Builds
 
