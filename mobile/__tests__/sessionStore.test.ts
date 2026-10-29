@@ -45,4 +45,26 @@ describe("session store", () => {
     const store = createSessionStore(memoryStorage().storage);
     await expect(store.save("")).rejects.toThrow(/token/i);
   });
+
+  it("keeps the previous token when the keychain write fails", async () => {
+    const { storage, values, writes } = memoryStorage({ [SESSION_TOKEN_KEY]: "previous-token" });
+    storage.setItemAsync = async (key, value) => { writes.push(`set:${key}:${value}`); throw new Error("keychain unavailable"); };
+    const store = createSessionStore(storage);
+    await store.load();
+
+    await expect(store.save("new-token")).rejects.toThrow(/keychain unavailable/);
+    // A failed sign-in must not leave the API client holding an unpersisted token.
+    expect(store.current()).toBe("previous-token");
+    expect(values.get(SESSION_TOKEN_KEY)).toBe("previous-token");
+  });
+
+  it("does not expose a token that was never written", async () => {
+    const { storage } = memoryStorage();
+    storage.setItemAsync = async () => { throw new Error("keychain unavailable"); };
+    const store = createSessionStore(storage);
+    await store.load();
+
+    await expect(store.save("new-token")).rejects.toThrow(/keychain unavailable/);
+    expect(store.current()).toBeNull();
+  });
 });
