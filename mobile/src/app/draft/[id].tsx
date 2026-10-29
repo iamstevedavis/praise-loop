@@ -210,6 +210,14 @@ export default function DraftScreen() {
     }
   }, [applyUpdate, expire, share, shareDeps]);
 
+  // "Not yet" and the Android back button must not cancel the screen's view of a
+  // request that is already recording the post; the response would otherwise
+  // unlock the editor and then overwrite (and lock) it.
+  const dismissShare = useCallback(() => {
+    if (share.step === "saving") return;
+    setShare(declineShared());
+  }, [share.step]);
+
   if (status === "signedOut") return <Redirect href="/sign-in" />;
 
   if (loading) {
@@ -309,14 +317,14 @@ export default function DraftScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={share.step === "confirm" || share.step === "saving"} transparent animationType="fade" onRequestClose={() => setShare(declineShared())}>
+      <Modal visible={share.step === "confirm" || share.step === "saving"} transparent animationType="fade" onRequestClose={dismissShare}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Did you post it?</Text>
             <Text style={styles.modalBody}>{SHARED_HINT}. We only record what you tell us; nothing is detected automatically.</Text>
             {share.step === "confirm" && notice?.tone === "danger" ? <Text style={styles.modalBody}>{notice.message}</Text> : null}
             <Button label="Yes, mark as shared" onPress={() => { void confirmPost(); }} loading={share.step === "saving"} />
-            <Button label="Not yet" kind="secondary" onPress={() => setShare(declineShared())} />
+            <Button label="Not yet" kind="secondary" onPress={dismissShare} disabled={share.step === "saving"} />
           </View>
         </View>
       </Modal>
