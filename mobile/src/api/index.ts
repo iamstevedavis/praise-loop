@@ -1,6 +1,11 @@
 import { createApiClient } from "./client";
 import { appConfig } from "../config";
+import { sessionStore } from "../auth/store";
 
-// Token storage arrives with app sign-in (#85); until then every owner route is
-// expected to return 401 and the app stays on the placeholder screen.
-export const api = createApiClient({ baseUrl: appConfig.apiBaseUrl });
+// Every owner route takes the bearer token from the keychain. Before the first
+// load resolves this returns null, so a request made too early gets a 401 rather
+// than silently running unauthenticated.
+export const api = createApiClient({
+  baseUrl: appConfig.apiBaseUrl,
+  getToken: () => sessionStore.current()
+});

@@ -4,6 +4,9 @@ export type MobileConfig = {
   minimumVersion: string;
   latestVersion: string;
   features: string[];
+  // True only on a development server with MOBILE_DEV_AUTH=1; drives the demo
+  // sign-in button. Absent on older servers.
+  devAuth?: boolean;
 };
 
 const VERSION = /^\d+\.\d+\.\d+$/;
@@ -29,7 +32,8 @@ function isConfig(value: unknown): value is MobileConfig {
   return typeof config.minimumVersion === "string"
     && typeof config.latestVersion === "string"
     && Array.isArray(config.features)
-    && config.features.every(feature => typeof feature === "string");
+    && config.features.every(feature => typeof feature === "string")
+    && (config.devAuth === undefined || typeof config.devAuth === "boolean");
 }
 
 export async function fetchMobileConfig(client: ApiClient): Promise<MobileConfig> {

@@ -44,6 +44,20 @@ describe("version gate", () => {
     await expect(fetchMobileConfig(client)).rejects.toThrow(/invalid mobile config/i);
   });
 
+  it("reads the demo sign-in flag only when the server reports it", async () => {
+    const demo = createApiClient({ baseUrl: "http://localhost:3000", fetchImpl: fakeFetch(200, { ...config, devAuth: true }) });
+    await expect(fetchMobileConfig(demo)).resolves.toMatchObject({ devAuth: true });
+
+    const production = createApiClient({ baseUrl: "http://localhost:3000", fetchImpl: fakeFetch(200, { ...config, devAuth: false }) });
+    await expect(fetchMobileConfig(production)).resolves.toMatchObject({ devAuth: false });
+
+    const absent = createApiClient({ baseUrl: "http://localhost:3000", fetchImpl: fakeFetch(200, config) });
+    expect((await fetchMobileConfig(absent)).devAuth).toBeUndefined();
+
+    const malformed = createApiClient({ baseUrl: "http://localhost:3000", fetchImpl: fakeFetch(200, { ...config, devAuth: "yes" }) });
+    await expect(fetchMobileConfig(malformed)).rejects.toThrow(/invalid mobile config/i);
+  });
+
   it("propagates auth and limit errors from the config route", async () => {
     const limited = createApiClient({ baseUrl: "http://localhost:3000", fetchImpl: fakeFetch(429, {}) });
     await expect(fetchMobileConfig(limited)).rejects.toBeInstanceOf(ApiError);
