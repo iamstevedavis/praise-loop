@@ -2,6 +2,7 @@ import type { Draft, GenerationSnapshot } from "../api/drafts";
 
 export type QueueSections = {
   awaiting: Draft[];
+  making: Draft[];
   approved: Draft[];
   shared: Draft[];
   archived: Draft[];
@@ -22,13 +23,21 @@ const ACTIVE_STATES = new Set(["pending", "running", "retry"]);
 // Pure shaping of the queue response so every list state can be tested without a
 // renderer. The server already orders drafts newest first.
 export function buildQueue(drafts: Draft[], generation: GenerationSnapshot | null): QueueView {
-  const sections: QueueSections = { awaiting: [], approved: [], shared: [], archived: [], failed: [] };
+  const sections: QueueSections = { awaiting: [], making: [], approved: [], shared: [], archived: [], failed: [] };
   for (const draft of drafts) {
-    if (draft.status === "draft") sections.awaiting.push(draft);
-    else if (draft.status === "approved") sections.approved.push(draft);
+    const jobState = draft.job_state ?? "";
+    // Mirrors the web queue's stageOf(): a `draft` row is not reviewable until
+    // its job finished and both its caption and image exist, because the API
+    // rejects edits while a job is pending/running/retrying.
+    if (draft.status === "archived") sections.archived.push(draft);
     else if (draft.status === "shared") sections.shared.push(draft);
-    else if (draft.status === "archived") sections.archived.push(draft);
-    else if (draft.status === "failed") sections.failed.push(draft);
+    else if (ACTIVE_STATES.has(jobState)) sections.making.push(draft);
+    else if (draft.status === "failed" || jobState === "failed") sections.failed.push(draft);
+    else if (draft.status === "approved") sections.approved.push(draft);
+    else if (draft.status === "draft") {
+      if (draft.caption_text.trim() && draft.image_path) sections.awaiting.push(draft);
+      else sections.making.push(draft);
+    }
   }
   const period = generation?.periods[0];
   const activeJobs = (generation?.jobs ?? []).filter(job => ACTIVE_STATES.has(job.state)).length;
@@ -54,13 +63,14 @@ export function queueHeadline(view: QueueView, generating: boolean): string {
   return "No posts this week yet";
 }
 
-// Only an actually active job means work is in flight; `completed < target`
-// stays true for exhausted weeks and for jobs that have permanently failed.
+// A job in flight is enough on its own: the snapshot's job list is capped, so a
+// draft's job_state can still show work that the list no longer carries.
 export function isGenerating(view: QueueView): boolean {
-  return view.activeJobs > 0;
+  return view.activeJobs > 0 || view.making.length > 0;
 }
 
 export function queueEmptyMessage(view: QueueView): string {
+  if (view.making.length > 0) return "";
   if (view.awaiting.length + view.approved.length + view.shared.length === 0) {
     if (view.reviewsExhausted) {
       return "Every review for this week already has a post. New posts appear when more reviews arrive, or import reviews on the web app.";

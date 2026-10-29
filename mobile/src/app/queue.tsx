@@ -206,6 +206,14 @@ export default function QueueScreen() {
               </Section>
             ) : null}
 
+            {view.making.length > 0 ? (
+              <Section title="Being made" hint="These posts can be reviewed once their caption and image are ready.">
+                {view.making.map(draft => (
+                  <Text key={draft.id} style={styles.caption} numberOfLines={2}>“{draft.quote_text}”</Text>
+                ))}
+              </Section>
+            ) : null}
+
             {view.failed.length > 0 ? (
               <Section title="Needs attention" hint="Open a post to retry it from the web for now.">
                 {view.failed.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
