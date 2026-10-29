@@ -90,9 +90,10 @@ export default function DraftScreen() {
   }, [applyFetched, fetchDraft, handleError, status]);
 
   const reload = useCallback(async () => {
-    // A reload started during a mutation can finish later and overwrite the
-    // mutation's response with the older caption, status and version.
-    if (busy) return;
+    // A reload started during a mutation or share can finish later and overwrite
+    // the mutation's response; it also cannot cancel a running prepare/record,
+    // so clearing the lock here would let an old snapshot reach the share sheet.
+    if (busy || shareBusy) return;
     setLoading(true);
     // A failed confirmation leaves its draft snapshot behind; a reload means the
     // owner wants the server's version, not a retry against the stale one.
@@ -104,7 +105,7 @@ export default function DraftScreen() {
       setLoading(false);
       setNotice({ tone: "danger", message: message(error, "Couldn't load this post.") });
     }
-  }, [applyFetched, busy, fetchDraft, handleError]);
+  }, [applyFetched, busy, fetchDraft, handleError, shareBusy]);
 
   const applyUpdate = useCallback((updated: Draft, success: string) => {
     setDraft(previous => mergeDraft(previous, updated));
@@ -256,7 +257,7 @@ export default function DraftScreen() {
         <View style={styles.header}>
           <Button label="Back" kind="secondary" onPress={() => router.back()} />
           <View style={styles.headerRight}>
-            <Button label="Reload" kind="secondary" onPress={() => { void reload(); }} loading={loading} disabled={!!busy} />
+            <Button label="Reload" kind="secondary" onPress={() => { void reload(); }} loading={loading} disabled={!!busy || shareBusy} />
             <Chip label={draft.status === "draft" ? "Needs approval" : draft.status === "shared" ? "Shared by you" : draft.status} tone={draft.status === "approved" ? "success" : draft.status === "draft" ? "warning" : "neutral"} />
           </View>
         </View>
