@@ -31,30 +31,26 @@ API URL (development falls back to `http://localhost:3000`). Preview and product
 builds must set `EXPO_PUBLIC_API_BASE_URL`; there is no hard-coded secret, and the
 app only talks to our API.
 
-The app has a launch gate driven by `GET /api/mobile/config`, sign-in (`#85`) and
-the weekly queue (`#86`). A session token lives in the platform keychain
-(`expo-secure-store`), and the API client sends it as a bearer token; a 401 clears
-the keychain and returns to sign-in. The queue lists each business's drafts as
-ready to review, needs attention, approved or shared, with generation progress
-from `GET /api/generation`. Thumbnails are fetched with the bearer token, so media
-stays owner-protected, and the last loaded queue stays visible (read-only) when
-the network drops. A draft opens on a detail screen with the rendered card, the
-source quote and rating, a caption editor (200-character rule), and Approve and
-Archive with the draft's `version`; a 409 asks the owner to reload. The
-share-sheet flow (`#87`) follows.
-
-Google sign-in is the production path (`#81`). On a development server started with
-`MOBILE_DEV_AUTH=1`, the app also offers **Sign in as demo owner**, which mints a
-session for a fixed synthetic owner without Google:
+The app has five screens: a launch gate driven by `GET /api/mobile/config`, sign-in,
+an "update required" screen, the weekly queue (`#86`) and a draft detail with the
+share-sheet flow (`#87`). Sign-in is Google in production (`#85`/`#81`); a
+development server with `MOBILE_DEV_AUTH=1` also offers a demo owner, which is the
+fastest way to walk the whole flow with synthetic data:
 
 ```bash
-# repo root: set MOBILE_DEV_AUTH=1 in .env
+# repo root
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+docker compose exec web npm run dev:seed
+
+# mobile/
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.20:3000 npm start
 ```
 
-The route answers 404 in production builds, so the flag can never mint sessions on
-a shared server. Without seeded drafts the queue shows its empty state; `#87` adds
-`npm run dev:seed`.
+Then tap **Sign in as demo owner**. The seed creates two businesses and five
+rendered drafts; see [development](../docs/development.md#demo-flow-with-synthetic-data).
+The token lives in the platform keychain (`expo-secure-store`); the share sheet
+receives a cached PNG and the caption is copied to the clipboard for pasting into
+Instagram. `shared` is owner-reported, never inferred.
 
 ## Checks
 
@@ -65,9 +61,10 @@ npm test
 ```
 
 CI runs the same commands in the `mobile` job. Tests cover the API client's error
-mapping (401/409/429/network/timeout), the version gate, the demo-sign-in flag,
-the keychain session store, draft/bigint normalisation, queue grouping and
-generation progress.
+mapping (401/409/429/network/timeout), the version gate, the keychain session store,
+draft/version API shapes, queue list states and generation progress, and every
+share-flow branch (unavailable share sheet, download/copy/share failures, cancelled
+share, version conflict, expired session).
 
 ## Builds
 
