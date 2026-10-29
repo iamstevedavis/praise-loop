@@ -37,6 +37,47 @@ source, so new migration files apply on the next `up`.
 - **`Permission denied` on `.next/`, `public/` or `private-media/`**: files left
   root-owned by older containers; `sudo chown -R $USER:$USER .` once.
 
+## Demo flow with synthetic data
+
+The phone flow can be walked end to end without Google OAuth, an OpenAI key or a
+review provider. It is a development-only path; a production build (`next start`)
+answers 404 for the demo sign-in even if the flag is set.
+
+1. Put the flag in `.env` (it stays blank in `.env.example`):
+
+   ```
+   MOBILE_DEV_AUTH=1
+   ```
+
+2. Start the development stack and seed the demo owner:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+   docker compose exec web npm run dev:seed
+   ```
+
+   The seed creates `dev-owner` with two businesses and five rendered drafts
+   (three awaiting approval, one approved, one already shared), plus the current
+   week's generation period reserved so the worker does not add more. Re-running
+   it replaces only that owner's businesses and their images.
+
+3. Run the app on a phone with Expo Go. `localhost` points at the phone, so use
+   the machine's LAN address:
+
+   ```bash
+   cd mobile
+   npm ci
+   EXPO_PUBLIC_API_BASE_URL=http://192.168.1.20:3000 npm start
+   ```
+
+4. Tap **Sign in as demo owner**, approve a post, then open the approved one and
+   tap **Post** to open the share sheet. The caption is copied to the clipboard;
+   answer “Did you post it?” to record `shared`.
+
+The demo owner is an ordinary `auth_users` row, so ownership checks, version
+conflicts and audit events behave exactly as they do for a real owner. Never set
+`MOBILE_DEV_AUTH` on a shared or production server.
+
 ## Quickstart — all containers (production-style)
 
 ```bash
