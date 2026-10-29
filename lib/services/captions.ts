@@ -153,7 +153,9 @@ function chooseProvider(): Provider {
       name: "OpenRouter",
       url: "https://openrouter.ai/api/v1/chat/completions",
       apiKey: openrouterKey,
-      body: (prompt) => ({ model, messages: [{ role: "user", content: prompt }], max_tokens: 400 }),
+      // Captions need no chain of thought. Reasoning models (for example DeepSeek V4.1 Flash) otherwise
+      // spend the 400-token budget thinking and return empty content with finish_reason "length".
+      body: (prompt) => ({ model, messages: [{ role: "user", content: prompt }], max_tokens: 400, reasoning: { enabled: false } }),
       text: extractChatText,
       statusHint: "openrouter.ai/status"
     };
