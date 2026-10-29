@@ -107,6 +107,17 @@ async function removeDemoMedia(owner: string) {
 }
 
 async function main() {
+  // `docker compose exec` inherits only the container environment (the Compose
+  // files pass variables explicitly), and Next's .env loading does not apply to a
+  // standalone script. Fall back to .env so a flag placed there also works when
+  // the seed runs on the host.
+  if (!process.env.MOBILE_DEV_AUTH) {
+    try {
+      process.loadEnvFile();
+    } catch {
+      // No .env beside the working directory; the exported environment decides.
+    }
+  }
   if (!devAuthEnabled()) {
     throw new Error("Refusing to seed: set MOBILE_DEV_AUTH=1 and run in a development process (not a production build)");
   }
