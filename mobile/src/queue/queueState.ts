@@ -39,7 +39,10 @@ export function buildQueue(drafts: Draft[], generation: GenerationSnapshot | nul
       else sections.making.push(draft);
     }
   }
-  const period = generation?.periods[0];
+  const periods = generation?.periods ?? [];
+  const period = generation?.current_period
+    ? periods.find(item => item.period_start === generation.current_period) ?? null
+    : periods[0] ?? null;
   const activeJobs = (generation?.jobs ?? []).filter(job => ACTIVE_STATES.has(job.state)).length;
   return {
     ...sections,

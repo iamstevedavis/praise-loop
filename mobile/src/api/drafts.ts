@@ -43,6 +43,9 @@ export type GenerationPeriod = {
 export type GenerationSnapshot = {
   jobs: GenerationJob[];
   periods: GenerationPeriod[];
+  // The week the server considers current for this business's timezone. Without
+  // it, periods[0] can still be last week before this week's first request.
+  current_period: string | null;
 };
 
 const STATUSES: DraftStatus[] = ["draft", "approved", "archived", "shared", "failed", "scheduled", "published"];
@@ -95,8 +98,9 @@ export async function listDrafts(client: ApiClient, businessId: number): Promise
 }
 
 export async function fetchGeneration(client: ApiClient, businessId: number): Promise<GenerationSnapshot> {
-  const data = await client.request<{ jobs?: unknown; periods?: unknown }>(`/api/generation?businessId=${businessId}`);
+  const data = await client.request<{ jobs?: unknown; periods?: unknown; current_period?: unknown }>(`/api/generation?businessId=${businessId}`);
   return {
+    current_period: text(data?.current_period),
     jobs: Array.isArray(data?.jobs)
       ? (data.jobs as Record<string, unknown>[]).map(job => ({
           id: integer(job.id),

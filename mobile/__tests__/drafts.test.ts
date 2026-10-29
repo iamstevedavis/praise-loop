@@ -72,9 +72,11 @@ describe("draft API", () => {
   it("reads generation progress for the queue banner", async () => {
     const generation = await fetchGeneration(client(200, {
       jobs: [{ id: "1", draft_id: "12", state: "complete", attempts: 1, manual_retries: 0, error_code: null, period_start: "2026-10-26" }],
-      periods: [{ period_start: "2026-10-26", target: 4, allocated: 3, completed: 2, reason: "queued", timezone: "America/Toronto" }]
+      periods: [{ period_start: "2026-10-26", target: 4, allocated: 3, completed: 2, reason: "queued", timezone: "America/Toronto" }],
+      current_period: "2026-10-26"
     }), 4);
     expect(generation.periods[0]).toMatchObject({ target: 4, completed: 2 });
+    expect(generation.current_period).toBe("2026-10-26");
     expect(generation.jobs[0].draft_id).toBe(12);
   });
 

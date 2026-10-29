@@ -38,7 +38,8 @@ function job(id: number, state: string): GenerationJob {
 function generation(target: number, completed: number, jobStates: string[] = [], reason = "queued"): GenerationSnapshot {
   return {
     jobs: jobStates.map((state, index) => job(index + 1, state)),
-    periods: [{ period_start: "2026-10-26", target, allocated: target, completed, reason, timezone: "UTC" }]
+    periods: [{ period_start: "2026-10-26", target, allocated: target, completed, reason, timezone: "UTC" }],
+    current_period: "2026-10-26"
   };
 }
 
@@ -103,6 +104,18 @@ describe("queue shaping", () => {
 
   it("never reports more completed posts than the target", () => {
     expect(buildQueue([], generation(3, 5)).progress).toEqual({ completed: 3, target: 3 });
+  });
+
+  it("ignores last week's period before this week's first request", () => {
+    const stale: GenerationSnapshot = {
+      jobs: [],
+      periods: [{ period_start: "2026-10-26", target: 4, allocated: 4, completed: 4, reason: "reviews_exhausted", timezone: "UTC" }],
+      current_period: "2026-11-02"
+    };
+    const view = buildQueue([], stale);
+    expect(view.progress).toBeNull();
+    expect(view.reviewsExhausted).toBe(false);
+    expect(queueHeadline(view, isGenerating(view))).toBe("No posts this week yet");
   });
 
   it("puts reviewable posts first in the headline, then progress, then the empty state", () => {
