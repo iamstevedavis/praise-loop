@@ -1,0 +1,79 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ApiError } from "../api/client";
+import { sessionStore } from "./store";
+import { signInDemo as requestDemoSession, signOut as revokeSession } from "./session";
+
+type SessionStatus = "loading" | "signedOut" | "signedIn";
+
+type SessionValue = {
+  status: SessionStatus;
+  token: string | null;
+  signInDemo: () => Promise<void>;
+  signOut: () => Promise<void>;
+  // Call from a screen's catch: a 401 clears the keychain and returns the app to
+  // sign-in, which is what the API means by "session ended".
+  handleError: (error: unknown) => void;
+  // For a typed failure that did not arrive as a thrown ApiError.
+  expire: () => void;
+};
+
+const SessionContext = createContext<SessionValue | null>(null);
+
+export function SessionProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<SessionStatus>("loading");
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    sessionStore
+      .load()
+      .then(stored => {
+        if (cancelled) return;
+        setToken(stored);
+        setStatus(stored ? "signedIn" : "signedOut");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setToken(null);
+        setStatus("signedOut");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const signInDemo = useCallback(async () => {
+    await requestDemoSession();
+    setToken(sessionStore.current());
+    setStatus("signedIn");
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await revokeSession();
+    setToken(null);
+    setStatus("signedOut");
+  }, []);
+
+  const expire = useCallback(() => {
+    void sessionStore.clear();
+    setToken(null);
+    setStatus("signedOut");
+  }, []);
+
+  const handleError = useCallback((error: unknown) => {
+    if (error instanceof ApiError && error.kind === "signedOut") expire();
+  }, [expire]);
+
+  const value = useMemo(
+    () => ({ status, token, signInDemo, signOut, handleError, expire }),
+    [status, token, signInDemo, signOut, handleError, expire]
+  );
+
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+}
+
+export function useSession(): SessionValue {
+  const value = useContext(SessionContext);
+  if (!value) throw new Error("useSession must be used inside SessionProvider");
+  return value;
+}
