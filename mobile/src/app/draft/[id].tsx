@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import * as Sharing from "expo-sharing";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { api } from "../../api";
@@ -7,7 +9,8 @@ import { ApiError } from "../../api/client";
 import { captionProblem, listDrafts, saveCaption, setDraftStatus, type Draft } from "../../api/drafts";
 import { useSession } from "../../auth/SessionProvider";
 import { appConfig } from "../../config";
-import { absoluteMediaUrl } from "../../posting/media";
+import { discardDraftImage, downloadDraftImage, absoluteMediaUrl } from "../../posting/media";
+import { confirmShared, declineShared, prepareShare, SHARED_HINT, type ShareDeps, type ShareState } from "../../posting/shareFlow";
 import { Banner, Button, Chip } from "../../ui/components";
 import { colors } from "../../ui/theme";
 
@@ -42,13 +45,14 @@ export default function DraftScreen() {
   const params = useLocalSearchParams<{ id?: string; businessId?: string }>();
   const draftId = Number(params.id);
   const businessId = Number(params.businessId);
-  const { status, token, handleError } = useSession();
+  const { status, token, handleError, expire } = useSession();
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"caption" | "approve" | "archive" | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "danger"; message: string } | null>(null);
+  const [share, setShare] = useState<ShareState>({ step: "idle" });
 
   const fetchDraft = useCallback(async () => {
     const drafts = await listDrafts(api, businessId);
@@ -150,6 +154,46 @@ export default function DraftScreen() {
     }
   }, [applyUpdate, caption, draft, handleError]);
 
+  const shareDeps = useCallback((): ShareDeps => ({
+    canShare: () => Sharing.isAvailableAsync(),
+    downloadImage: item => downloadDraftImage({ token: token ?? "", draftId: item.id, imagePath: item.image_path ?? "" }),
+    copyCaption: async text => { await Clipboard.setStringAsync(text); },
+    openShareSheet: uri => Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Share this post" }),
+    markShared: item => setDraftStatus(api, item, "shared"),
+    discardImage: discardDraftImage
+  }), [token]);
+
+  const post = useCallback(async () => {
+    if (!draft) return;
+    if (caption.trim() !== draft.caption_text.trim()) {
+      setNotice({ tone: "warning", message: "Save your caption changes, then approve this post again before sharing." });
+      return;
+    }
+    setNotice(null);
+    setShare({ step: "preparing" });
+    const next = await prepareShare(draft, shareDeps());
+    if (next.step === "error") {
+      // There is no modal for preparation failures, so surface them in the banner
+      // instead of dropping back to an unexplained idle button.
+      setNotice({ tone: "danger", message: next.message });
+      setShare({ step: "idle" });
+      return;
+    }
+    setShare(next);
+  }, [draft, shareDeps]);
+
+  const confirmPost = useCallback(async () => {
+    if (share.step !== "confirm") return;
+    setShare({ step: "saving", draft: share.draft });
+    const next = await confirmShared(share, shareDeps());
+    setShare(next);
+    if (next.step === "done") applyUpdate(next.draft, "Marked as shared. Thanks for posting.");
+    if (next.step === "error") {
+      setNotice({ tone: "danger", message: next.message });
+      if (next.reason === "signedOut") expire();
+    }
+  }, [applyUpdate, expire, share, shareDeps]);
+
   if (status === "signedOut") return <Redirect href="/sign-in" />;
 
   if (loading) {
@@ -174,9 +218,13 @@ export default function DraftScreen() {
   const readOnly = draft.status === "shared" || draft.status === "archived" || draft.status === "scheduled" || draft.status === "published";
   // A mutation always answers with the server's caption, so the editor must not
   // accept text that the pending response would overwrite.
-  const locked = readOnly || busy !== null;
+  const locked = readOnly || busy !== null || share.step !== "idle";
   const problem = captionProblem(caption);
   const canApprove = draft.status === "draft" && !problem && !!draft.image_path;
+  const preparing = share.step === "preparing";
+  // Sharing copies the persisted caption. Saving an edit resets an approved post
+  // to draft, so pending edits must be saved and re-approved before posting.
+  const captionDirty = caption.trim() !== draft.caption_text.trim();
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -219,13 +267,15 @@ export default function DraftScreen() {
 
         {readOnly ? (
           <Banner
-            message={draft.status === "scheduled" || draft.status === "published"
-              ? "Scheduled posts are managed on the web app, so they are read-only here."
-              : "This post is read-only, so its caption and status can't be changed."}
+            message={draft.status === "shared"
+              ? "This post was marked as shared from your phone, so it is read-only. It is owner-reported, never verified as published."
+              : draft.status === "archived"
+                ? "Archived posts are read-only here. Bring this post back on the web app to edit it."
+                : "Scheduled posts are managed on the web app, so they are read-only here."}
           />
         ) : (
           <View style={styles.actions}>
-            <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={!!busy} />
+            <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={readOnly || !!busy} />
             {draft.status === "draft" ? (
               <>
                 <Button label="Approve" onPress={() => { void changeStatus("approved"); }} loading={busy === "approve"} disabled={!canApprove || !!busy} />
@@ -233,12 +283,26 @@ export default function DraftScreen() {
               </>
             ) : null}
             {draft.status === "approved" ? (
-              <Text style={styles.hint}>Approved drafts are posted from the next app update.</Text>
+              <>
+                <Button label={preparing ? "Preparing…" : "Post"} onPress={() => { void post(); }} loading={preparing} disabled={captionDirty} />
+                {captionDirty ? <Text style={styles.hint}>Save your caption changes, then approve this post again before sharing it.</Text> : null}
+              </>
             ) : null}
             <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy} />
           </View>
         )}
       </ScrollView>
+
+      <Modal visible={share.step === "confirm" || share.step === "saving"} transparent animationType="fade" onRequestClose={() => setShare(declineShared())}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Did you post it?</Text>
+            <Text style={styles.modalBody}>{SHARED_HINT}. We only record what you tell us; nothing is detected automatically.</Text>
+            <Button label="Yes, mark as shared" onPress={() => { void confirmPost(); }} loading={share.step === "saving"} />
+            <Button label="Not yet" kind="secondary" onPress={() => setShare(declineShared())} />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -258,5 +322,9 @@ const styles = StyleSheet.create({
   counter: { alignSelf: "flex-end", fontSize: 12, color: colors.faint, marginTop: -6 },
   counterOver: { color: colors.danger },
   actions: { gap: 10, marginTop: 6 },
-  hint: { fontSize: 13, lineHeight: 18, color: colors.muted }
+  hint: { fontSize: 13, lineHeight: 18, color: colors.muted },
+  modalBackdrop: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(18,40,58,0.45)" },
+  modalCard: { gap: 12, borderRadius: 20, padding: 22, backgroundColor: colors.surface },
+  modalTitle: { fontSize: 22, fontWeight: "700", color: colors.ink },
+  modalBody: { fontSize: 15, lineHeight: 21, color: colors.muted }
 });
