@@ -3,7 +3,7 @@ import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInpu
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams, usePreventRemove } from "expo-router";
 import { api } from "../../api";
 import { ApiError } from "../../api/client";
 import { captionProblem, listDrafts, saveCaption, setDraftStatus, type Draft } from "../../api/drafts";
@@ -56,6 +56,12 @@ export default function DraftScreen() {
   // Mutations and the share flow both carry a draft version, and a caption save
   // resets an approved post to draft. They must never overlap.
   const shareBusy = share.step === "preparing" || share.step === "saving";
+  // Leaving mid-preparation would still open the share sheet from the old
+  // screen and lose the "Did you post it?" confirmation. Block the removal
+  // (including Android back) until the operation settles.
+  usePreventRemove(shareBusy, () => {
+    setNotice({ tone: "warning", message: "Finishing the share first — try again in a moment." });
+  });
 
   const fetchDraft = useCallback(async () => {
     const drafts = await listDrafts(api, businessId);
