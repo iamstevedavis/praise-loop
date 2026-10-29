@@ -102,7 +102,20 @@ export default function DraftScreen() {
     setBusy(next === "approved" ? "approve" : "archive");
     setNotice(null);
     try {
-      const updated = await setDraftStatus(api, draft, next);
+      let current = draft;
+      // Approval acts on the persisted caption. Save a pending edit first, or the
+      // owner sees "approved" and their text is silently replaced by the old one.
+      if (next === "approved" && caption.trim() !== draft.caption_text.trim()) {
+        const problem = captionProblem(caption);
+        if (problem) {
+          setNotice({ tone: "warning", message: problem });
+          return;
+        }
+        current = await saveCaption(api, draft, caption);
+        setDraft(current);
+        setCaption(current.caption_text);
+      }
+      const updated = await setDraftStatus(api, current, next);
       applyUpdate(updated, next === "approved" ? "Approved. Post it whenever you're ready." : "Archived. It won't be posted.");
     } catch (error) {
       handleError(error);
@@ -110,7 +123,7 @@ export default function DraftScreen() {
     } finally {
       setBusy(null);
     }
-  }, [applyUpdate, draft, handleError]);
+  }, [applyUpdate, caption, draft, handleError]);
 
   if (status === "signedOut") return <Redirect href="/sign-in" />;
 

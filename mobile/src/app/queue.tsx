@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
 import { api } from "../api";
 import { ApiError } from "../api/client";
 import { listBusinesses, type Business } from "../api/businesses";
@@ -52,8 +52,9 @@ export default function QueueScreen() {
   const { status, token, signOut, handleError } = useSession();
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
   const [businessId, setBusinessId] = useState<number | null>(null);
-  const [drafts, setDrafts] = useState<Draft[] | null>(null);
-  const [generation, setGeneration] = useState<GenerationSnapshot | null>(null);
+  // Keyed by business: a switch must never show the previous business's drafts
+  // under the new name, even when the new request fails.
+  const [queue, setQueue] = useState<{ businessId: number; drafts: Draft[]; generation: GenerationSnapshot } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,15 +63,18 @@ export default function QueueScreen() {
   const fetchBusinesses = useCallback(() => listBusinesses(api), []);
   const fetchQueue = useCallback((id: number) => Promise.all([listDrafts(api, id), fetchGeneration(api, id)]), []);
 
+  const applyBusinesses = useCallback((list: Business[]) => {
+    setBusinesses(list);
+    setBusinessId(current => current ?? list[0]?.id ?? null);
+    setError(list.length === 0 ? "No business yet. Set one up on the web app first." : null);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const list = await fetchBusinesses();
-        if (cancelled) return;
-        setBusinesses(list);
-        setBusinessId(current => current ?? list[0]?.id ?? null);
-        setError(list.length === 0 ? "No business yet. Set one up on the web app first." : null);
+        if (!cancelled) applyBusinesses(list);
       } catch (cause) {
         if (cancelled) return;
         handleError(cause);
@@ -78,24 +82,25 @@ export default function QueueScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [fetchBusinesses, handleError]);
+  }, [applyBusinesses, fetchBusinesses, handleError]);
 
-  useEffect(() => {
+  // Also runs on focus, so approving or archiving on the detail screen shows up
+  // as soon as the owner comes back to the list.
+  useFocusEffect(useCallback(() => {
     if (!businessId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const [nextDrafts, nextGeneration] = await fetchQueue(businessId);
+        const [drafts, generation] = await fetchQueue(businessId);
         if (cancelled) return;
-        setDrafts(nextDrafts);
-        setGeneration(nextGeneration);
+        setQueue({ businessId, drafts, generation });
         setOffline(false);
         setError(null);
       } catch (cause) {
         if (cancelled) return;
         handleError(cause);
         if (cause instanceof ApiError && cause.kind === "network") {
-          // Keep the last loaded queue visible; it is read-only while offline.
+          // Keep the last loaded queue for this business visible; it is read-only.
           setOffline(true);
         } else {
           setError("Couldn't load this week's posts.");
@@ -103,19 +108,20 @@ export default function QueueScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [businessId, fetchQueue, handleError]);
+  }, [businessId, fetchQueue, handleError]));
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
       if (businessId) {
-        const [nextDrafts, nextGeneration] = await fetchQueue(businessId);
-        setDrafts(nextDrafts);
-        setGeneration(nextGeneration);
+        const [drafts, generation] = await fetchQueue(businessId);
+        setQueue({ businessId, drafts, generation });
         setOffline(false);
         setError(null);
       } else {
-        await fetchBusinesses();
+        // The initial request failed; a pull-to-refresh must be able to recover
+        // the business list and pick the first business, not just refetch it.
+        applyBusinesses(await fetchBusinesses());
       }
     } catch (cause) {
       handleError(cause);
@@ -123,12 +129,13 @@ export default function QueueScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [businessId, fetchBusinesses, fetchQueue, handleError]);
+  }, [applyBusinesses, businessId, fetchBusinesses, fetchQueue, handleError]);
 
   if (status === "signedOut") return <Redirect href="/sign-in" />;
 
   const business = businesses?.find(item => item.id === businessId) ?? null;
-  const view = drafts ? buildQueue(drafts, generation) : null;
+  const loaded = queue && queue.businessId === businessId ? queue : null;
+  const view = loaded ? buildQueue(loaded.drafts, loaded.generation) : null;
   const generating = view ? isGenerating(view) : false;
 
   return (
@@ -163,10 +170,17 @@ export default function QueueScreen() {
           </ScrollView>
         ) : null}
 
-        {offline ? <Banner message="Offline — showing the last loaded queue. Changes are unavailable until you reconnect." tone="warning" /> : null}
+        {offline ? (
+          <Banner
+            message={loaded
+              ? "Offline — showing the last loaded queue. Changes are unavailable until you reconnect."
+              : "Offline — this business's posts can't be loaded until you reconnect."}
+            tone="warning"
+          />
+        ) : null}
         {error && !offline ? <Banner message={error} tone="danger" /> : null}
 
-        {drafts === null && !error && !offline ? <ActivityIndicator style={styles.loading} /> : null}
+        {!loaded && !error && !offline ? <ActivityIndicator style={styles.loading} /> : null}
 
         {view ? (
           <>
