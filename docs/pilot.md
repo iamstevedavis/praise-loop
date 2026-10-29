@@ -38,7 +38,7 @@ handle source-system deletion and legally retained invoices separately.
 ## Operator checklist and minimal observation ledger
 
 1. Confirm consent, segment, price, timezone, access isolation and dependencies.
-2. Start a UTC timestamped ledger from `test-data/pilot-synthetic.json`; use a new
+2. Start a UTC timestamped ledger from `sample-data/pilot/pilot-synthetic.json`; use a new
    pseudonym and `synthetic: false` ONLY for a real consenting business.
 3. Record `onboarding_start` when the owner begins business setup after sign-in.
    Record the FIRST `draft_complete` only once caption is nonempty and its image
