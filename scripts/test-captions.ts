@@ -40,8 +40,10 @@ function documentedResponse(text: string): Response {
 const originalFetch = globalThis.fetch;
 const originalKey = process.env.OPENAI_API_KEY;
 const originalTimeout = process.env.OPENAI_TIMEOUT_MS;
+const originalOpenRouterKey = process.env.OPENROUTER_API_KEY;
+const originalOpenRouterModel = process.env.OPENROUTER_MODEL;
 
-type FetchInit = { signal?: AbortSignal; headers?: Record<string, string> };
+type FetchInit = { signal?: AbortSignal; headers?: Record<string, string>; body?: unknown };
 
 function stubFetch(impl: (url: unknown, init: FetchInit) => Promise<Response>) {
   globalThis.fetch = (async (_url: any, init: FetchInit) => impl(_url, init)) as typeof fetch;
@@ -53,6 +55,10 @@ function restore() {
   else process.env.OPENAI_API_KEY = originalKey;
   if (originalTimeout === undefined) delete process.env.OPENAI_TIMEOUT_MS;
   else process.env.OPENAI_TIMEOUT_MS = originalTimeout;
+  if (originalOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+  else process.env.OPENROUTER_API_KEY = originalOpenRouterKey;
+  if (originalOpenRouterModel === undefined) delete process.env.OPENROUTER_MODEL;
+  else process.env.OPENROUTER_MODEL = originalOpenRouterModel;
 }
 
 async function documentedShapeTest() {
@@ -201,6 +207,73 @@ async function authorizationHeaderTest() {
   await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "Amazing coffee" });
 }
 
+function chatResponse(content: unknown): Response {
+  return jsonResponse({ id: "gen-fixture", model: "vendor/model:free", choices: [{ index: 0, message: { role: "assistant", content } }] });
+}
+
+async function openRouterTest() {
+  delete process.env.OPENAI_API_KEY;
+  process.env.OPENROUTER_API_KEY = "sk-or-test-fixture";
+  process.env.OPENROUTER_MODEL = "vendor/some-model:free";
+  const params = { businessName: "Cafe Nova", quoteText: "Amazing coffee" };
+  try {
+    // The model comes only from the setting; the request is a chat completion with bearer auth.
+    let seen: { url: string; auth: string | undefined; model: string; prompt: string } | null = null;
+    stubFetch(async (url, init) => {
+      const body = JSON.parse(String(init.body)) as { model: string; messages: { content: string }[] };
+      seen = { url: String(url), auth: init.headers?.authorization, model: body.model, prompt: body.messages[0].content };
+      return chatResponse(JSON.stringify(CAPTIONS));
+    });
+    assert.deepEqual(await generateCaptionVariants(params), CAPTIONS);
+    assert.deepEqual(
+      { ...seen!, prompt: undefined },
+      { url: "https://openrouter.ai/api/v1/chat/completions", auth: "Bearer sk-or-test-fixture", model: "vendor/some-model:free", prompt: undefined }
+    );
+    assert.match(seen!.prompt, /Cafe Nova/);
+
+    // Fenced JSON and array-of-parts content decode like the OpenAI path.
+    stubFetch(async () => chatResponse("```json\n" + JSON.stringify(CAPTIONS) + "\n```"));
+    assert.deepEqual(await generateCaptionVariants(params), CAPTIONS);
+    stubFetch(async () => chatResponse([{ type: "text", text: JSON.stringify(CAPTIONS) }]));
+    assert.deepEqual(await generateCaptionVariants(params), CAPTIONS);
+
+    // Malformed responses fail with a clear error.
+    stubFetch(async () => jsonResponse({ choices: [] }));
+    await assert.rejects(() => generateCaptionVariants(params), /missing the choices array/);
+    stubFetch(async () => chatResponse(null));
+    await assert.rejects(() => generateCaptionVariants(params), /no text content/);
+
+    // Errors never echo the body, and OpenRouter's numeric error code is reported.
+    const secret = "CUSTOMER_REVIEW_RAW_TEXT_THAT_MUST_NEVER_BE_LOGGED";
+    stubFetch(async () => jsonResponse({ error: { message: `bad: ${secret}`, code: 429 } }, 429));
+    await assert.rejects(() => generateCaptionVariants({ ...params, quoteText: secret }), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /HTTP 429 \(429\).*openrouter\.ai\/status/);
+      assert.doesNotMatch(err.message, /CUSTOMER_REVIEW_RAW_TEXT/);
+      return true;
+    });
+
+    // The model is a required setting: no default is guessed, and nothing is sent without it.
+    stubFetch(async () => { throw new Error("must not call the network without a model"); });
+    for (const missing of [undefined, "   "]) {
+      if (missing === undefined) delete process.env.OPENROUTER_MODEL; else process.env.OPENROUTER_MODEL = missing;
+      await assert.rejects(() => generateCaptionVariants(params), /OPENROUTER_MODEL is not set/);
+    }
+
+    // OpenAI keeps priority when both are configured, so existing deployments are unchanged.
+    process.env.OPENROUTER_MODEL = "vendor/some-model:free";
+    process.env.OPENAI_API_KEY = "sk-test-fixture";
+    let url = "";
+    stubFetch(async (u) => { url = String(u); return documentedResponse(JSON.stringify(CAPTIONS)); });
+    await generateCaptionVariants(params);
+    assert.equal(url, "https://api.openai.com/v1/responses");
+  } finally {
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_MODEL;
+    process.env.OPENAI_API_KEY = "sk-test-fixture";
+  }
+}
+
 async function main() {
   process.env.OPENAI_API_KEY = "sk-test-fixture";
 
@@ -215,6 +288,7 @@ async function main() {
     await timeoutTest();
     await missingApiKeyTest();
     await authorizationHeaderTest();
+    await openRouterTest();
   } finally {
     restore();
   }

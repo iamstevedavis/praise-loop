@@ -105,21 +105,8 @@ function parseCaptionStyles(raw: string): CaptionStyles {
   return variants;
 }
 
-export async function generateCaptionVariants(params: {
-  businessName: string;
-  quoteText: string;
-  brandTone?: BrandTone;
-}): Promise<CaptionStyles> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not set");
-  }
-
-  const requestedTone = params.brandTone && BRAND_TONES.includes(params.brandTone)
-    ? params.brandTone
-    : "friendly";
-
-  const prompt = `You are writing social captions for a local business.
+function buildPrompt(params: { businessName: string; quoteText: string }, requestedTone: BrandTone): string {
+  return `You are writing social captions for a local business.
 Business: ${params.businessName}
 Quote: "${params.quoteText}"
 Preferred brand tone: ${requestedTone}
@@ -131,22 +118,92 @@ Rules:
 - max 5 hashtags per caption
 - no markdown, no extra keys
 - lean the ${requestedTone} caption closest to the preferred tone`;
+}
 
+// OpenAI wins when both keys are set, so existing deployments behave exactly as before.
+// OpenRouter is used only when OPENAI_API_KEY is unset; its model is always an explicit setting.
+type Provider = {
+  name: string;
+  url: string;
+  apiKey: string;
+  body: (prompt: string) => unknown;
+  text: (data: unknown) => string;
+  statusHint: string;
+};
+
+function chooseProvider(): Provider {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    return {
+      name: "OpenAI",
+      url: "https://api.openai.com/v1/responses",
+      apiKey: openaiKey,
+      body: (prompt) => ({ model: "gpt-4o-mini", input: prompt, max_output_tokens: 400 }),
+      text: extractOutputText,
+      statusHint: "status.openai.com"
+    };
+  }
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  if (openrouterKey) {
+    const model = process.env.OPENROUTER_MODEL?.trim();
+    if (!model) {
+      throw new Error("OPENROUTER_MODEL is not set; choose a model id (for example one ending in :free) at openrouter.ai/models");
+    }
+    return {
+      name: "OpenRouter",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      apiKey: openrouterKey,
+      body: (prompt) => ({ model, messages: [{ role: "user", content: prompt }], max_tokens: 400 }),
+      text: extractChatText,
+      statusHint: "openrouter.ai/status"
+    };
+  }
+  throw new Error("OPENAI_API_KEY is not set (or set OPENROUTER_API_KEY and OPENROUTER_MODEL)");
+}
+
+function extractChatText(data: unknown): string {
+  if (!data || typeof data !== "object") {
+    throw new Error("Caption provider returned a non-object response");
+  }
+  const choices = (data as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) {
+    throw new Error("Caption provider response is missing the choices array");
+  }
+  const content = (choices[0] as { message?: { content?: unknown } } | null)?.message?.content;
+  const text = typeof content === "string"
+    ? content
+    : Array.isArray(content)
+      ? content.map((part) => (part && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "")).join("")
+      : "";
+  if (!text.trim()) {
+    throw new Error("Caption provider returned no text content");
+  }
+  return text.trim();
+}
+
+export async function generateCaptionVariants(params: {
+  businessName: string;
+  quoteText: string;
+  brandTone?: BrandTone;
+}): Promise<CaptionStyles> {
+  const provider = chooseProvider();
+
+  const requestedTone = params.brandTone && BRAND_TONES.includes(params.brandTone)
+    ? params.brandTone
+    : "friendly";
+
+  const prompt = buildPrompt(params, requestedTone);
   const timeout = timeoutMs();
 
   let res: Response;
   try {
-    res = await fetch("https://api.openai.com/v1/responses", {
+    res = await fetch(provider.url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
+        authorization: `Bearer ${provider.apiKey}`
       },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        input: prompt,
-        max_output_tokens: 400
-      }),
+      body: JSON.stringify(provider.body(prompt)),
       signal: AbortSignal.timeout(timeout)
     });
   } catch (err) {
@@ -162,16 +219,17 @@ Rules:
     let code: string | null = null;
     try {
       const errBody = (await res.json()) as { error?: { code?: unknown } };
-      code = typeof errBody?.error?.code === "string" ? errBody.error.code : null;
+      const raw = errBody?.error?.code;
+      code = typeof raw === "string" || typeof raw === "number" ? String(raw) : null;
     } catch {
       // non-JSON error body; status + code below are still actionable
     }
     throw new Error(
       `Caption provider returned HTTP ${res.status}${code ? ` (${code})` : ""}. ` +
-      "Check status.openai.com for outages and retry with bounded backoff."
+      `Check ${provider.statusHint} for outages and retry with bounded backoff.`
     );
   }
 
   const data = await res.json();
-  return parseCaptionStyles(extractOutputText(data));
+  return parseCaptionStyles(provider.text(data));
 }
