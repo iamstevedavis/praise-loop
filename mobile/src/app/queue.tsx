@@ -1,0 +1,243 @@
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Redirect, router } from "expo-router";
+import { api } from "../api";
+import { ApiError } from "../api/client";
+import { listBusinesses, type Business } from "../api/businesses";
+import { fetchGeneration, listDrafts, type Draft, type GenerationSnapshot } from "../api/drafts";
+import { absoluteMediaUrl } from "../posting/media";
+import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
+import { useSession } from "../auth/SessionProvider";
+import { appConfig } from "../config";
+import { Banner, Chip, Section } from "../ui/components";
+import { colors } from "../ui/theme";
+
+function statusChip(draft: Draft) {
+  if (draft.status === "draft") return <Chip label="Needs approval" tone="warning" />;
+  if (draft.status === "approved") return <Chip label="Approved" tone="success" />;
+  if (draft.status === "shared") return <Chip label="Shared by you" />;
+  if (draft.status === "failed") return <Chip label="Needs a retry" tone="danger" />;
+  return <Chip label={draft.status} />;
+}
+
+function DraftRow({ draft, businessId, token }: { draft: Draft; businessId: number; token: string | null }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open the post quoting ${draft.author_name ?? "a reviewer"}`}
+      onPress={() => router.push({ pathname: "/draft/[id]", params: { id: String(draft.id), businessId: String(businessId) } })}
+      style={styles.card}
+    >
+      {draft.image_path && token ? (
+        <Image
+          source={{ uri: absoluteMediaUrl(appConfig.apiBaseUrl, draft.image_path), headers: { authorization: `Bearer ${token}` } }}
+          style={styles.thumb}
+          accessibilityIgnoresInvertColors
+        />
+      ) : (
+        <View style={[styles.thumb, styles.thumbEmpty]}><Text style={styles.thumbEmptyText}>No image</Text></View>
+      )}
+      <View style={styles.cardBody}>
+        {statusChip(draft)}
+        <Text style={styles.quote} numberOfLines={2}>{draft.quote_text}</Text>
+        <Text style={styles.caption} numberOfLines={2}>{draft.caption_text || "No caption yet"}</Text>
+        <Text style={styles.meta}>{draft.author_name ?? "Reviewer"} · {draft.rating ? `${draft.rating}★` : "unrated"}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+export default function QueueScreen() {
+  const { status, token, signOut, handleError } = useSession();
+  const [businesses, setBusinesses] = useState<Business[] | null>(null);
+  const [businessId, setBusinessId] = useState<number | null>(null);
+  const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [generation, setGeneration] = useState<GenerationSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Fetchers stay pure so the effects below only set state after an await.
+  const fetchBusinesses = useCallback(() => listBusinesses(api), []);
+  const fetchQueue = useCallback((id: number) => Promise.all([listDrafts(api, id), fetchGeneration(api, id)]), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await fetchBusinesses();
+        if (cancelled) return;
+        setBusinesses(list);
+        setBusinessId(current => current ?? list[0]?.id ?? null);
+        setError(list.length === 0 ? "No business yet. Set one up on the web app first." : null);
+      } catch (cause) {
+        if (cancelled) return;
+        handleError(cause);
+        setError(cause instanceof ApiError && cause.kind === "network" ? "Can't reach the server. Check your connection and pull to refresh." : "Couldn't load your businesses.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fetchBusinesses, handleError]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [nextDrafts, nextGeneration] = await fetchQueue(businessId);
+        if (cancelled) return;
+        setDrafts(nextDrafts);
+        setGeneration(nextGeneration);
+        setOffline(false);
+        setError(null);
+      } catch (cause) {
+        if (cancelled) return;
+        handleError(cause);
+        if (cause instanceof ApiError && cause.kind === "network") {
+          // Keep the last loaded queue visible; it is read-only while offline.
+          setOffline(true);
+        } else {
+          setError("Couldn't load this week's posts.");
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [businessId, fetchQueue, handleError]);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (businessId) {
+        const [nextDrafts, nextGeneration] = await fetchQueue(businessId);
+        setDrafts(nextDrafts);
+        setGeneration(nextGeneration);
+        setOffline(false);
+        setError(null);
+      } else {
+        await fetchBusinesses();
+      }
+    } catch (cause) {
+      handleError(cause);
+      setOffline(cause instanceof ApiError && cause.kind === "network");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [businessId, fetchBusinesses, fetchQueue, handleError]);
+
+  if (status === "signedOut") return <Redirect href="/sign-in" />;
+
+  const business = businesses?.find(item => item.id === businessId) ?? null;
+  const view = drafts ? buildQueue(drafts, generation) : null;
+  const generating = view ? isGenerating(view) : false;
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refresh(); }} tintColor={colors.muted} />}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.eyebrow}>This week</Text>
+            <Text style={styles.title}>{business?.name ?? "PraiseLoop"}</Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={() => { void signOut(); }}>
+            <Text style={styles.link}>Sign out</Text>
+          </Pressable>
+        </View>
+
+        {businesses && businesses.length > 1 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.picker}>
+            {businesses.map(item => (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: item.id === businessId }}
+                onPress={() => setBusinessId(item.id)}
+                style={[styles.pickerItem, item.id === businessId && styles.pickerItemSelected]}
+              >
+                <Text style={[styles.pickerText, item.id === businessId && styles.pickerTextSelected]} numberOfLines={1}>{item.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
+        {offline ? <Banner message="Offline — showing the last loaded queue. Changes are unavailable until you reconnect." tone="warning" /> : null}
+        {error && !offline ? <Banner message={error} tone="danger" /> : null}
+
+        {drafts === null && !error && !offline ? <ActivityIndicator style={styles.loading} /> : null}
+
+        {view ? (
+          <>
+            <View style={styles.hero}>
+              <Text style={styles.headline}>{queueHeadline(view, generating)}</Text>
+              {view.progress ? (
+                <Text style={styles.progress}>
+                  {generating
+                    ? `Making ${view.progress.completed} of ${view.progress.target} posts…`
+                    : `${view.progress.target} ${view.progress.target === 1 ? "post" : "posts"} this week`}
+                </Text>
+              ) : null}
+            </View>
+
+            {queueEmptyMessage(view) && view.readyCount === 0 ? (
+              <Banner message={queueEmptyMessage(view)} />
+            ) : null}
+
+            {view.awaiting.length > 0 ? (
+              <Section title="Ready to review">
+                {view.awaiting.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+              </Section>
+            ) : null}
+
+            {view.failed.length > 0 ? (
+              <Section title="Needs attention" hint="Open a post to retry it from the web for now.">
+                {view.failed.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+              </Section>
+            ) : null}
+
+            {view.approved.length > 0 ? (
+              <Section title="Approved — ready to post" hint="Open a post, then tap Post to share it to Instagram or Facebook.">
+                {view.approved.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+              </Section>
+            ) : null}
+
+            {view.shared.length > 0 ? (
+              <Section title="Shared" hint="Owner-reported, so these are not claimed as verified publications.">
+                {view.shared.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+              </Section>
+            ) : null}
+          </>
+        ) : null}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 20, paddingBottom: 48, gap: 12 },
+  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  headerText: { flex: 1, gap: 4 },
+  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.4, textTransform: "uppercase", color: colors.muted },
+  title: { fontSize: 28, lineHeight: 34, fontWeight: "700", color: colors.ink },
+  link: { fontSize: 14, fontWeight: "600", color: colors.accent, paddingVertical: 6 },
+  picker: { gap: 8, paddingVertical: 4 },
+  pickerItem: { borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 8, maxWidth: 220 },
+  pickerItemSelected: { backgroundColor: colors.ink, borderColor: colors.ink },
+  pickerText: { fontSize: 14, color: colors.ink },
+  pickerTextSelected: { color: "#ffffff", fontWeight: "600" },
+  loading: { marginTop: 24 },
+  hero: { gap: 4, marginTop: 8 },
+  headline: { fontSize: 22, lineHeight: 28, fontWeight: "700", color: colors.ink },
+  progress: { fontSize: 14, color: colors.muted },
+  card: { flexDirection: "row", gap: 12, padding: 10, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
+  thumb: { width: 84, height: 84, borderRadius: 12, backgroundColor: colors.line },
+  thumbEmpty: { alignItems: "center", justifyContent: "center" },
+  thumbEmptyText: { fontSize: 11, color: colors.faint },
+  cardBody: { flex: 1, gap: 4 },
+  quote: { fontSize: 15, lineHeight: 20, fontWeight: "600", color: colors.ink },
+  caption: { fontSize: 13, lineHeight: 18, color: colors.muted },
+  meta: { fontSize: 12, color: colors.faint }
+});
