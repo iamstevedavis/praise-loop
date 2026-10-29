@@ -10,7 +10,7 @@ import { captionProblem, listDrafts, saveCaption, setDraftStatus, type Draft } f
 import { useSession } from "../../auth/SessionProvider";
 import { appConfig } from "../../config";
 import { discardDraftImage, downloadDraftImage, absoluteMediaUrl } from "../../posting/media";
-import { confirmShared, declineShared, prepareShare, SHARED_HINT, type ShareDeps, type ShareState } from "../../posting/shareFlow";
+import { confirmShared, declineShared, PASTE_HINT, prepareShare, SHARED_HINT, type ShareDeps, type ShareState } from "../../posting/shareFlow";
 import { Banner, Button, Chip } from "../../ui/components";
 import { colors } from "../../ui/theme";
 
@@ -317,7 +317,7 @@ export default function DraftScreen() {
             {draft.status === "approved" ? (
               <>
                 <Button label={preparing ? "Preparing…" : "Post"} onPress={() => { void post(); }} loading={preparing} disabled={captionDirty || !!busy} />
-                {captionDirty ? <Text style={styles.hint}>Save your caption changes, then approve this post again before sharing it.</Text> : null}
+                <Text style={styles.hint}>{captionDirty ? "Save your caption changes, then approve this post again before sharing it." : PASTE_HINT}</Text>
               </>
             ) : null}
             <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy} />

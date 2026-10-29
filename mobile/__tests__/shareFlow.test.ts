@@ -1,6 +1,6 @@
 import { ApiError } from "../src/api/client";
 import type { Draft } from "../src/api/drafts";
-import { confirmShared, declineShared, prepareShare, SHARED_HINT, type ShareDeps, type ShareState } from "../src/posting/shareFlow";
+import { confirmShared, declineShared, PASTE_HINT, prepareShare, SHARED_HINT, type ShareDeps, type ShareState } from "../src/posting/shareFlow";
 
 const draft: Draft = {
   id: 12,
@@ -51,6 +51,13 @@ describe("share flow", () => {
       "discard:file:///cache/draft-12.png"
     ]);
     expect(SHARED_HINT).toMatch(/paste/i);
+  });
+
+  it("tells the owner to paste the caption before the sheet opens", () => {
+    // The confirmation modal is only reached after sharing, so the same
+    // instruction has to be on screen next to the Post button.
+    expect(PASTE_HINT).toMatch(/paste/i);
+    expect(PASTE_HINT).toMatch(/instagram/i);
   });
 
   it("never opens the sheet when sharing is unavailable", async () => {
