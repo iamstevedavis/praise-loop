@@ -45,6 +45,10 @@ export default function DraftScreen() {
   }, []);
 
   useEffect(() => {
+    // A cold-start deep link mounts this screen before the keychain token is
+    // restored; an early request would go out unauthenticated and its 401 would
+    // sign out an owner who is actually signed in.
+    if (status !== "signedIn") return;
     let cancelled = false;
     void (async () => {
       try {
@@ -58,7 +62,7 @@ export default function DraftScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [applyFetched, fetchDraft, handleError]);
+  }, [applyFetched, fetchDraft, handleError, status]);
 
   const reload = useCallback(async () => {
     setLoading(true);
