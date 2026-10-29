@@ -20,6 +20,24 @@ function message(error: unknown, fallback: string): string {
   return fallback;
 }
 
+// Mutation responses are the bare draft_posts row, not the joined list shape, so
+// normalizeDraft fills the review and job columns with null. Keep the values the
+// screen already showed instead of replacing the author and rating with null.
+function mergeDraft(previous: Draft | null, updated: Draft): Draft {
+  if (!previous) return updated;
+  return {
+    ...previous,
+    ...updated,
+    rating: previous.rating,
+    author_name: previous.author_name,
+    reviewed_at: previous.reviewed_at,
+    source: previous.source,
+    job_state: previous.job_state,
+    error_code: previous.error_code,
+    provider_state: previous.provider_state
+  };
+}
+
 export default function DraftScreen() {
   const params = useLocalSearchParams<{ id?: string; businessId?: string }>();
   const draftId = Number(params.id);
@@ -76,7 +94,7 @@ export default function DraftScreen() {
   }, [applyFetched, fetchDraft, handleError]);
 
   const applyUpdate = useCallback((updated: Draft, success: string) => {
-    setDraft(updated);
+    setDraft(previous => mergeDraft(previous, updated));
     setCaption(updated.caption_text);
     setNotice({ tone: "success", message: success });
   }, []);
@@ -116,7 +134,7 @@ export default function DraftScreen() {
           return;
         }
         current = await saveCaption(api, draft, caption);
-        setDraft(current);
+        setDraft(previous => mergeDraft(previous, current));
         setCaption(current.caption_text);
       }
       const updated = await setDraftStatus(api, current, next);

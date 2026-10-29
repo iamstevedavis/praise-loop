@@ -1,7 +1,7 @@
 import type { Draft, GenerationJob, GenerationSnapshot } from "../src/api/drafts";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../src/queue/queueState";
 
-function draft(id: number, status: Draft["status"]): Draft {
+function draft(id: number, status: Draft["status"], overrides: Partial<Draft> = {}): Draft {
   return {
     id,
     version: 0,
@@ -18,7 +18,8 @@ function draft(id: number, status: Draft["status"]): Draft {
     source: "manual",
     job_state: null,
     error_code: null,
-    provider_state: null
+    provider_state: null,
+    ...overrides
   };
 }
 
@@ -52,8 +53,34 @@ describe("queue shaping", () => {
     expect(view.progress).toBeNull();
   });
 
-  it("derives the generating state from active jobs, not remaining quota", () => {
-    const running = buildQueue([], generation(4, 1, ["done", "running", "pending"]));
+  it("keeps unfinished jobs and incomplete drafts out of review-ready", () => {
+    const running = draft(6, "draft", { job_state: "running" });
+    const noCaption = draft(5, "draft", { caption_text: "   " });
+    const noImage = draft(4, "draft", { image_path: null });
+    const ready = draft(3, "draft");
+    const view = buildQueue([running, noCaption, noImage, ready], generation(4, 0));
+
+    expect(view.awaiting.map(item => item.id)).toEqual([3]);
+    expect(view.making.map(item => item.id)).toEqual([6, 5, 4]);
+    expect(view.readyCount).toBe(1);
+    // The draft rows alone can prove work is in flight even when the capped job
+    // list no longer mentions them.
+    expect(isGenerating(view)).toBe(true);
+    expect(queueHeadline(view, isGenerating(view))).toBe("1 post is ready to review");
+
+    const onlyMaking = buildQueue([running], generation(4, 0));
+    expect(queueHeadline(onlyMaking, isGenerating(onlyMaking))).toBe("This week's posts are still being made");
+    expect(queueEmptyMessage(onlyMaking)).toBe("");
+  });
+
+  it("shows a failed job as needing attention instead of still being made", () => {
+    const view = buildQueue([draft(1, "draft", { job_state: "failed" })], generation(4, 0));
+    expect(view.failed.map(item => item.id)).toEqual([1]);
+    expect(view.making).toEqual([]);
+    expect(isGenerating(view)).toBe(false);
+  });
+
+  it("derives the generating state from active jobs, not remaining quota", () => {    const running = buildQueue([], generation(4, 1, ["done", "running", "pending"]));
     expect(running.progress).toEqual({ completed: 1, target: 4 });
     expect(running.activeJobs).toBe(2);
     expect(isGenerating(running)).toBe(true);
