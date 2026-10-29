@@ -70,6 +70,7 @@ export default function QueueScreen() {
   }, []);
 
   useEffect(() => {
+    if (status !== "signedIn") return;
     let cancelled = false;
     void (async () => {
       try {
@@ -82,12 +83,12 @@ export default function QueueScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [applyBusinesses, fetchBusinesses, handleError]);
+  }, [applyBusinesses, fetchBusinesses, handleError, status]);
 
   // Also runs on focus, so approving or archiving on the detail screen shows up
   // as soon as the owner comes back to the list.
   useFocusEffect(useCallback(() => {
-    if (!businessId) return;
+    if (status !== "signedIn" || !businessId) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -108,7 +109,7 @@ export default function QueueScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [businessId, fetchQueue, handleError]));
+  }, [businessId, fetchQueue, handleError, status]));
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
