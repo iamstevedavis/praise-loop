@@ -56,7 +56,7 @@ assert.equal(orphan.unmatchedSessionEnds, 1);
 assert.equal(orphan.sessions[0].minutes, null);
 const textBearing = { ...business, review_text: "private", tokens: "private", events: events.map(e => ({ ...e, caption: "private" })) };
 assert.doesNotMatch(JSON.stringify(report([textBearing])), /private|caption|tokens|review_text/);
-const example = JSON.parse(readFileSync("test-data/pilot-synthetic.json", "utf8")) as PilotBusiness[];
+const example = JSON.parse(readFileSync("sample-data/pilot/pilot-synthetic.json", "utf8")) as PilotBusiness[];
 assert.deepEqual(pilotReport(example, ["synthetic-demo"], start, end), []);
 const demonstration = pilotReport(example.map(b => ({ ...b, synthetic: false })), ["synthetic-demo"], start, end)[0];
 assert.deepEqual([demonstration.firstDraftMinutes, demonstration.sessions[0].minutes, demonstration.approvedWithoutEditsRate], [4, 12, 1]);

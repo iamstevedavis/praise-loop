@@ -1,8 +1,13 @@
 # Sample data
 
-Example files for trying PraiseLoop with realistic content. `csv/` holds review
-exports you can upload through the app's CSV import, one file per business or
-business type, named after the business (`<business-name>.csv`).
+The one folder for example data that isn't code: files you can upload by hand,
+templates for the pilot, and the inputs the dev seeder and tests read.
+
+- `csv/` holds review exports you can upload through the app's CSV import, one
+  file per business or business type, named after the business
+  (`<business-name>.csv`).
+- `pilot/` holds the synthetic pilot ledger used as a template in
+  [docs/pilot.md](../docs/pilot.md) and read by `scripts/test-pilot.ts`.
 
 **Everything here is invented.** The reviews and reviewer names are fictional and
 only exist to exercise the app. Never publish a post made from sample reviews,
@@ -19,6 +24,11 @@ recognised as duplicates instead of adding rows. Limits: 1 MB, 1000 rows; see
 
 ## Files
 
-| File | Business |
+| File | What it is |
 |---|---|
 | `csv/hespeler-powder-coating.csv` | Hespeler Powder Coating, Cambridge, ON: sandblasting, powder coating and machine shop (24 reviews, ratings 2-5) |
+| `pilot/pilot-synthetic.json` | Example pilot ledger entries for synthetic businesses |
+
+The "download a sample" file in the app's onboarding is separate on purpose:
+`public/onboarding-example.csv` is served by the web app, so it has to stay under
+`public/`.
