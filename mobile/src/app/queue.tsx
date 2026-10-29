@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useFocusEffect } from "expo-router";
@@ -58,6 +58,11 @@ export default function QueueScreen() {
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Refresh has no effect cleanup of its own, so it checks the selection again
+  // after awaiting and drops a response for a business the owner left.
+  const businessIdRef = useRef<number | null>(null);
+
+  useEffect(() => { businessIdRef.current = businessId; }, [businessId]);
 
   // Fetchers stay pure so the effects below only set state after an await.
   const fetchBusinesses = useCallback(() => listBusinesses(api), []);
@@ -115,8 +120,12 @@ export default function QueueScreen() {
     setRefreshing(true);
     try {
       if (businessId) {
-        const [drafts, generation] = await fetchQueue(businessId);
-        setQueue({ businessId, drafts, generation });
+        const selected = businessId;
+        const [drafts, generation] = await fetchQueue(selected);
+        // The owner may have switched businesses while this was in flight; their
+        // newer load must win, or the check below would leave them on a spinner.
+        if (businessIdRef.current !== selected) return;
+        setQueue({ businessId: selected, drafts, generation });
         setOffline(false);
         setError(null);
       } else {
