@@ -38,7 +38,10 @@ the keychain and returns to sign-in. The queue lists each business's drafts as
 ready to review, needs attention, approved or shared, with generation progress
 from `GET /api/generation`. Thumbnails are fetched with the bearer token, so media
 stays owner-protected, and the last loaded queue stays visible (read-only) when
-the network drops. The share-sheet flow (`#87`) follows.
+the network drops. A draft opens on a detail screen with the rendered card, the
+source quote and rating, a caption editor (200-character rule), and Approve and
+Archive with the draft's `version`; a 409 asks the owner to reload. The
+share-sheet flow (`#87`) follows.
 
 Google sign-in is the production path (`#81`). On a development server started with
 `MOBILE_DEV_AUTH=1`, the app also offers **Sign in as demo owner**, which mints a

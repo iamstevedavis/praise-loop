@@ -1,0 +1,217 @@
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { api } from "../../api";
+import { ApiError } from "../../api/client";
+import { captionProblem, listDrafts, saveCaption, setDraftStatus, type Draft } from "../../api/drafts";
+import { useSession } from "../../auth/SessionProvider";
+import { appConfig } from "../../config";
+import { absoluteMediaUrl } from "../../posting/media";
+import { Banner, Button, Chip } from "../../ui/components";
+import { colors } from "../../ui/theme";
+
+function message(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    if (error.kind === "conflict") return "This post changed somewhere else. Reload and try again.";
+    if (error.kind === "limit") return "You've reached today's limit. Try again tomorrow.";
+    return error.message;
+  }
+  return fallback;
+}
+
+export default function DraftScreen() {
+  const params = useLocalSearchParams<{ id?: string; businessId?: string }>();
+  const draftId = Number(params.id);
+  const businessId = Number(params.businessId);
+  const { status, token, handleError } = useSession();
+
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [caption, setCaption] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<"caption" | "approve" | "archive" | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "warning" | "danger"; message: string } | null>(null);
+
+  const fetchDraft = useCallback(async () => {
+    const drafts = await listDrafts(api, businessId);
+    return drafts.find(item => item.id === draftId) ?? null;
+  }, [businessId, draftId]);
+
+  const applyFetched = useCallback((found: Draft | null) => {
+    setDraft(found);
+    setCaption(found?.caption_text ?? "");
+    setLoading(false);
+    setNotice(found ? null : { tone: "danger", message: "This post is no longer in the queue." });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const found = await fetchDraft();
+        if (!cancelled) applyFetched(found);
+      } catch (error) {
+        if (cancelled) return;
+        handleError(error);
+        setLoading(false);
+        setNotice({ tone: "danger", message: message(error, "Couldn't load this post.") });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [applyFetched, fetchDraft, handleError]);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      applyFetched(await fetchDraft());
+    } catch (error) {
+      handleError(error);
+      setLoading(false);
+      setNotice({ tone: "danger", message: message(error, "Couldn't load this post.") });
+    }
+  }, [applyFetched, fetchDraft, handleError]);
+
+  const applyUpdate = useCallback((updated: Draft, success: string) => {
+    setDraft(updated);
+    setCaption(updated.caption_text);
+    setNotice({ tone: "success", message: success });
+  }, []);
+
+  const save = useCallback(async () => {
+    if (!draft) return;
+    const problem = captionProblem(caption);
+    if (problem) {
+      setNotice({ tone: "warning", message: problem });
+      return;
+    }
+    setBusy("caption");
+    setNotice(null);
+    try {
+      const updated = await saveCaption(api, draft, caption);
+      applyUpdate(updated, "Caption saved.");
+    } catch (error) {
+      handleError(error);
+      setNotice({ tone: "danger", message: message(error, "Couldn't save the caption.") });
+    } finally {
+      setBusy(null);
+    }
+  }, [applyUpdate, caption, draft, handleError]);
+
+  const changeStatus = useCallback(async (next: "approved" | "archived") => {
+    if (!draft) return;
+    setBusy(next === "approved" ? "approve" : "archive");
+    setNotice(null);
+    try {
+      const updated = await setDraftStatus(api, draft, next);
+      applyUpdate(updated, next === "approved" ? "Approved. Post it whenever you're ready." : "Archived. It won't be posted.");
+    } catch (error) {
+      handleError(error);
+      setNotice({ tone: "danger", message: message(error, "Couldn't update this post.") });
+    } finally {
+      setBusy(null);
+    }
+  }, [applyUpdate, draft, handleError]);
+
+  if (status === "signedOut") return <Redirect href="/sign-in" />;
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+        <ActivityIndicator style={styles.loading} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!draft) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+        <View style={styles.content}>
+          <Banner message={notice?.message ?? "This post is unavailable."} tone="danger" />
+          <Button label="Back to the queue" kind="secondary" onPress={() => router.back()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const readOnly = draft.status === "shared" || draft.status === "archived";
+  const problem = captionProblem(caption);
+  const canApprove = draft.status === "draft" && !problem && !!draft.image_path;
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.header}>
+          <Button label="Back" kind="secondary" onPress={() => router.back()} />
+          <View style={styles.headerRight}>
+            <Button label="Reload" kind="secondary" onPress={() => { void reload(); }} loading={loading} />
+            <Chip label={draft.status === "draft" ? "Needs approval" : draft.status === "shared" ? "Shared by you" : draft.status} tone={draft.status === "approved" ? "success" : draft.status === "draft" ? "warning" : "neutral"} />
+          </View>
+        </View>
+
+        {notice ? <Banner message={notice.message} tone={notice.tone} /> : null}
+
+        {draft.image_path && token ? (
+          <Image
+            source={{ uri: absoluteMediaUrl(appConfig.apiBaseUrl, draft.image_path), headers: { authorization: `Bearer ${token}` } }}
+            style={styles.image}
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
+
+        <Text style={styles.quote}>“{draft.quote_text}”</Text>
+        <Text style={styles.meta}>
+          {draft.author_name ?? "Reviewer"}{draft.rating ? ` · ${"★".repeat(draft.rating)}${"☆".repeat(5 - draft.rating)}` : ""}
+        </Text>
+
+        <Text style={styles.label}>Caption</Text>
+        <TextInput
+          style={[styles.input, readOnly && styles.inputReadOnly]}
+          value={caption}
+          onChangeText={setCaption}
+          editable={!readOnly}
+          multiline
+          autoCapitalize="sentences"
+          accessibilityLabel="Caption"
+          placeholder="Write the caption the owner will paste"
+        />
+        <Text style={[styles.counter, (caption.trim().length > 200) && styles.counterOver]}>{caption.trim().length}/200</Text>
+
+        {readOnly ? (
+          <Banner message="This post is read-only, so its caption and status can't be changed." />
+        ) : (
+          <View style={styles.actions}>
+            <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={!!busy} />
+            {draft.status === "draft" ? (
+              <>
+                <Button label="Approve" onPress={() => { void changeStatus("approved"); }} loading={busy === "approve"} disabled={!canApprove || !!busy} />
+                <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy} />
+                {!canApprove ? <Text style={styles.hint}>{problem ?? "A post needs an image before it can be approved."}</Text> : null}
+              </>
+            ) : null}
+            {draft.status === "approved" ? (
+              <Text style={styles.hint}>Approved drafts are posted from the next app update.</Text>
+            ) : null}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 20, paddingBottom: 48, gap: 12 },
+  loading: { marginTop: 40 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  image: { width: "100%", aspectRatio: 1, borderRadius: 18, backgroundColor: colors.line },
+  quote: { fontSize: 22, lineHeight: 29, fontWeight: "600", color: colors.ink },
+  meta: { fontSize: 14, color: colors.muted },
+  label: { fontSize: 13, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: colors.muted, marginTop: 6 },
+  input: { minHeight: 96, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, padding: 14, fontSize: 16, lineHeight: 22, color: colors.ink, textAlignVertical: "top" },
+  inputReadOnly: { backgroundColor: "#f1eee8", color: colors.muted },
+  counter: { alignSelf: "flex-end", fontSize: 12, color: colors.faint, marginTop: -6 },
+  counterOver: { color: colors.danger },
+  actions: { gap: 10, marginTop: 6 },
+  hint: { fontSize: 13, lineHeight: 18, color: colors.muted }
+});
