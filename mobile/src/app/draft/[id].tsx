@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useLocalSearchParams, usePreventRemove } from "expo-router";
 import { api } from "../../api";
 import { ApiError } from "../../api/client";
-import { captionProblem, listDrafts, saveCaption, setDraftStatus, type Draft } from "../../api/drafts";
+import { captionProblem, listDrafts, regenerateDraft, saveCaption, setDraftStatus, type Draft } from "../../api/drafts";
 import { useSession } from "../../auth/SessionProvider";
 import { appConfig } from "../../config";
 import { discardDraftImage, downloadDraftImage, absoluteMediaUrl } from "../../posting/media";
@@ -50,7 +50,7 @@ export default function DraftScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"caption" | "approve" | "archive" | null>(null);
+  const [busy, setBusy] = useState<"caption" | "approve" | "archive" | "regenerate" | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "danger"; message: string } | null>(null);
   const [share, setShare] = useState<ShareState>({ step: "idle" });
   // Mutations and the share flow both carry a draft version, and a caption save
@@ -167,6 +167,23 @@ export default function DraftScreen() {
     }
   }, [applyUpdate, busy, caption, draft, handleError, shareBusy]);
 
+  // Asks the server for a fresh caption and image. The post is cleared and re-queued, so there is
+  // nothing useful to show here: go back to the queue, which reloads on focus and shows it being made.
+  const regenerate = useCallback(async () => {
+    if (!draft || busy || shareBusy) return;
+    setBusy("regenerate");
+    setNotice(null);
+    try {
+      await regenerateDraft(api, draft);
+      router.back();
+    } catch (error) {
+      handleError(error);
+      setNotice({ tone: "danger", message: message(error, "Couldn't start a new version.") });
+    } finally {
+      setBusy(null);
+    }
+  }, [busy, draft, handleError, shareBusy]);
+
   const shareDeps = useCallback((): ShareDeps => ({
     canShare: () => Sharing.isAvailableAsync(),
     downloadImage: item => downloadDraftImage({ token: token ?? "", draftId: item.id, imagePath: item.image_path ?? "" }),
@@ -253,6 +270,8 @@ export default function DraftScreen() {
   const locked = readOnly || busy !== null || shareBusy;
   const problem = captionProblem(caption);
   const canApprove = draft.status === "draft" && !problem && !!draft.image_path;
+  // Same rule as the web app: a finished post waiting for approval, or one whose generation failed.
+  const canRegenerate = (draft.status === "draft" && !!draft.image_path) || draft.status === "failed";
   const preparing = share.step === "preparing";
   // Sharing copies the persisted caption. Saving an edit resets an approved post
   // to draft, so pending edits must be saved and re-approved before posting.
@@ -318,6 +337,12 @@ export default function DraftScreen() {
               <>
                 <Button label={preparing ? "Preparing…" : "Post"} onPress={() => { void post(); }} loading={preparing} disabled={captionDirty || !!busy} />
                 <Text style={styles.hint}>{captionDirty ? "Save your caption changes, then approve this post again before sharing it." : PASTE_HINT}</Text>
+              </>
+            ) : null}
+            {canRegenerate ? (
+              <>
+                <Button label="Make a new version" kind="secondary" onPress={() => { void regenerate(); }} loading={busy === "regenerate"} disabled={captionDirty || !!busy || shareBusy} />
+                <Text style={styles.hint}>{captionDirty ? "Save your caption changes first." : "Replaces the caption and image with a fresh version and clears approval."}</Text>
               </>
             ) : null}
             <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy} />

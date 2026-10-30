@@ -1,5 +1,5 @@
 import { createApiClient } from "../src/api/client";
-import { captionProblem, fetchGeneration, listDrafts, saveCaption, setDraftStatus, type Draft } from "../src/api/drafts";
+import { captionProblem, fetchGeneration, listDrafts, REGENERATE_EXHAUSTED, regenerateDraft, saveCaption, setDraftStatus, type Draft } from "../src/api/drafts";
 
 function draftRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -67,6 +67,32 @@ describe("draft API", () => {
   it("surfaces a version conflict as a conflict error", async () => {
     const draft = { id: 12, version: 3 } as Draft;
     await expect(setDraftStatus(client(409), draft, "approved")).rejects.toMatchObject({ kind: "conflict" });
+  });
+
+  it("asks for a new version with the post id and its current version", async () => {
+    const calls: { url: string; body?: unknown }[] = [];
+    const draft = { id: 12, version: 5 } as Draft;
+    await expect(regenerateDraft(client(202, { queued: true, message: "Regeneration queued; approval cleared" }, calls), draft)).resolves.toBeUndefined();
+    expect(calls[0].url).toBe("http://localhost:3000/api/generation/regenerate");
+    expect(calls[0].body).toEqual({ draftPostId: 12, version: 5 });
+  });
+
+  it("explains a post that has used up its new versions instead of calling it stale", async () => {
+    const draft = { id: 12, version: 5 } as Draft;
+    const error = await regenerateDraft(client(409, { queued: false, message: "Generation retry budget exhausted or no recoverable job" }), draft).catch(e => e);
+    expect(error).toMatchObject({ kind: "http", status: 409 });
+    expect(error.message).toBe(REGENERATE_EXHAUSTED);
+  });
+
+  it("still reports a stale version as a conflict when asking for a new version", async () => {
+    const draft = { id: 12, version: 5 } as Draft;
+    await expect(regenerateDraft(client(409, { error: "Draft changed; refresh and retry" }), draft)).rejects.toMatchObject({ kind: "conflict" });
+    await expect(regenerateDraft(client(409), draft)).rejects.toMatchObject({ kind: "conflict" });
+  });
+
+  it("maps a session that ended while asking for a new version to signed out", async () => {
+    const draft = { id: 12, version: 5 } as Draft;
+    await expect(regenerateDraft(client(401), draft)).rejects.toMatchObject({ kind: "signedOut" });
   });
 
   it("reads generation progress for the queue banner", async () => {
