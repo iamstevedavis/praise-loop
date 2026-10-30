@@ -150,6 +150,30 @@ describe("draft image loader", () => {
     expect(files.get(draftImageCacheName("/api/media/draft-8.png"))?.exists).toBe(false);
   });
 
+  it("does not retry for a screen that was waiting when the session ended", async () => {
+    const { fs, files, deleted, calls } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+    let starts = 0;
+    let finish: () => void = () => {};
+    fs.download = (_url, target) => new Promise(resolve => {
+      starts += 1;
+      finish = () => { target.exists = true; resolve(target); };
+    });
+
+    // The queue and the draft screen share one download.
+    const queue = loader.load("old-token", "/api/media/draft-10.png").catch(error => error);
+    const detail = loader.load("old-token", "/api/media/draft-10.png").catch(error => error);
+    loader.clear();
+    finish();
+
+    expect(await queue).toBeInstanceOf(Error);
+    expect(await detail).toBeInstanceOf(Error);
+    expect(starts).toBe(1); // the waiting screen did not start a second download with the old token
+    expect(calls).toHaveLength(0);
+    expect(files.get(draftImageCacheName("/api/media/draft-10.png"))?.exists).toBe(false);
+    expect(deleted).toContain("file:///cache/praiseloop-media-draft-10.png");
+  });
+
   it("leaves a newer session's download alone when an older one finishes late", async () => {
     const { fs, files, deleted } = harness();
     const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
