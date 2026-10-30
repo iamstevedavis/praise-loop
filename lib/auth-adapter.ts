@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Adapter, AdapterUser, AdapterSession, AdapterAccount } from "next-auth/adapters";
-import { query } from "./db";
+import { query, transaction } from "./db";
 export const sessionHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const user = async (sql: string, values: unknown[]) => (await query<AdapterUser>(sql, values)).rows[0] ?? null;
 export const authAdapter: Adapter = {
@@ -12,8 +12,21 @@ export const authAdapter: Adapter = {
   updateUser: async u => (await user(`UPDATE auth_users SET name=CASE WHEN name_source='owner' THEN name ELSE coalesce($2,name) END,email=coalesce($3,email),"emailVerified"=coalesce($4,"emailVerified") WHERE id=$1 RETURNING *`, [u.id,u.name,u.email,u.emailVerified]))!,
   deleteUser: async id => { await query("DELETE FROM auth_users WHERE id=$1", [id]); },
   // Authentication requires only provider identity. Provider access/refresh tokens are discarded.
-  linkAccount: async (a: AdapterAccount) => { await query("INSERT INTO auth_accounts VALUES($1,$2,$3)", [a.provider,a.providerAccountId,a.userId]); },
-  unlinkAccount: async (a: AdapterAccount) => { await query("DELETE FROM auth_accounts WHERE provider=$1 AND provider_account_id=$2", [a.provider,a.providerAccountId]); },
+  // The policy checks live here as well as in lib/authLinking.ts so a future caller
+  // cannot attach a second subject for one provider to the same owner.
+  linkAccount: async (a: AdapterAccount) => {
+    await transaction(async () => {
+      await query("SELECT id FROM auth_users WHERE id=$1 FOR UPDATE", [a.userId]);
+      const existing = (await query<{ provider_account_id: string }>("SELECT provider_account_id FROM auth_accounts WHERE owner_id=$1 AND provider=$2", [a.userId, a.provider])).rows;
+      if (existing.some(row => row.provider_account_id !== a.providerAccountId)) throw new Error("Sign-in method already linked");
+      await query(
+        `INSERT INTO auth_accounts(provider,provider_account_id,owner_id,created_at,last_used_at)
+         VALUES($1,$2,$3,now(),now()) ON CONFLICT(provider,provider_account_id) DO NOTHING`,
+        [a.provider, a.providerAccountId, a.userId]
+      );
+    });
+  },
+  unlinkAccount: async (a: AdapterAccount) => { await query("DELETE FROM auth_accounts WHERE provider=$1 AND provider_account_id=$2", [a.provider, a.providerAccountId]); },
   createSession: async s => { await query("INSERT INTO auth_sessions(token_hash,owner_id,expires,kind) VALUES($1,$2,$3,'web')", [sessionHash(s.sessionToken),s.userId,s.expires]); return s; },
   getSessionAndUser: async token => {
     const row = (await query<{ owner_id: string; expires: Date }>("SELECT owner_id,expires FROM auth_sessions WHERE token_hash=$1 AND expires>now()", [sessionHash(token)])).rows[0];

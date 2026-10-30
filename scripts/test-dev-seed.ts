@@ -16,6 +16,7 @@ async function snapshot(client: PoolClient, media: string) {
   const rows = async (sql: string) => (await client.query(sql)).rows;
   return {
     owners: await rows("SELECT id,email,name FROM auth_users ORDER BY id"),
+    methods: await rows("SELECT owner_id,provider,provider_account_id,email FROM auth_accounts ORDER BY owner_id,provider"),
     plans: await rows("SELECT owner_id,plan,source FROM owner_plans ORDER BY owner_id"),
     planEvents: await rows("SELECT owner_id,plan,actor FROM owner_plan_events ORDER BY owner_id,id"),
     tokens: await rows("SELECT owner_id,token,platform FROM device_push_tokens ORDER BY token"),
@@ -73,6 +74,10 @@ async function main() {
       const one = await snapshot(client, media);
 
       assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-free": "free" });
+      assert.deepEqual(one.methods.map(m => [m.owner_id, m.provider, m.email]), [
+        ["dev-owner", "google", "demo@praiseloop.invalid"],
+        ["dev-owner-free", "google", "demo-free@praiseloop.invalid"]
+      ], "each demo owner has a synthetic method to walk the account screen");
       assert.equal(first.businesses.length, SEED_BUSINESSES.length);
       const seeded = one.businesses.filter(b => b.owner_id !== "real-owner");
       assert.deepEqual(seeded.map(b => b.name).sort(), SEED_BUSINESSES.map(b => b.name).sort());

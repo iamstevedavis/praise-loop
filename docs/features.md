@@ -331,3 +331,30 @@ profile screen (#151), so the two cannot disagree.
   sign-in-after-edit case and the read-only email.
 - Avatars show initials for now; keeping Google's profile picture is a later
   decision (see `docs/decisions.md`).
+
+
+## Linked sign-in methods (#156)
+
+One owner can have several sign-in methods, but every path uses one rule: the
+provider plus its stable subject is the identity, never the email alone. Google
+may still link an owner that has the same verified address but no Google row;
+a different Google subject on an already-linked address is rejected, as before
+(#116/#117). A provider whose email claim is not guaranteed verified (Microsoft
+later) creates a new owner instead of linking by email. A signed-in owner can
+link another method from `/account` or the phone API even when the emails
+differ, and the last method cannot be unlinked.
+
+The shared code is `lib/authLinking.ts`; `docs/auth.md` records the policy and
+`docs/decisions.md` records why. Migration 017 records the method's email and
+its added/last-used timestamps, and is additive. `GET /api/account/methods`,
+`POST /api/account/methods` (verified Google ID token) and
+`DELETE /api/account/methods` are owner-wide and work with cookie and bearer
+sessions.
+
+Rollback: stop linking writes, retain `auth_accounts.email`, `created_at` and
+`last_used_at`; old code ignores the extra columns. No owner or business data is
+rewritten by the migration. `scripts/test-auth-linking.ts` covers link, reject,
+unlink-last and the one-address/two-subject race.
+
+Recovery has no in-app path until the verified email code (#157) ships. There is
+no support override route and merging two owners remains an operator task.
