@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router } from "expo-router";
@@ -29,6 +29,8 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [saving, setSaving] = useState(false);
+  // A ref, not the state: the keyboard Done key can fire twice before a re-render shows `saving`.
+  const savingRef = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -90,11 +92,13 @@ export default function ProfileScreen() {
   }, [profile]);
 
   const save = useCallback(async () => {
+    if (savingRef.current) return;
     const problem = nameProblem(draftName);
     if (problem) {
       setFormError(problem);
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setFormError(null);
     try {
@@ -105,6 +109,7 @@ export default function ProfileScreen() {
       handleError(cause);
       setFormError(message(cause, "Couldn't save your name. Try again."));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }, [draftName, handleError]);
@@ -172,6 +177,7 @@ export default function ProfileScreen() {
                     autoCorrect={false}
                     maxLength={NAME_MAX_LENGTH + 20}
                     returnKeyType="done"
+                    editable={!saving}
                     onSubmitEditing={() => { void save(); }}
                     style={styles.input}
                   />
