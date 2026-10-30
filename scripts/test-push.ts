@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { databaseFixture } from "./db-fixture";
 import { createMobileSession } from "../lib/mobileSessions";
+import { generationWeek } from "../lib/services/generation";
 import * as tokens from "../app/api/mobile/push-tokens/route";
 import { checkReceipts, enqueuePostsReady, pushTick, type PushMessage, type PushTransport } from "../lib/services/push";
 
@@ -20,7 +21,10 @@ async function main() {
     for (const [id, email] of [["push-a", "a@example.invalid"], ["push-b", "b@example.invalid"]]) await client.query("INSERT INTO auth_users(id,email) VALUES($1,$2)", [id, email]);
     const biz = async (owner: string, name: string) => (await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES($1,'UTC',$2) RETURNING id", [name, owner])).rows[0].id;
     const ba = await biz("push-a", "Synthetic A"), bb = await biz("push-b", "Synthetic B");
-    const week = "2026-10-26";
+    // A minute ahead keeps the test independent of the database clock (rows default
+    // next_at to now()) and of the day it runs, while still using this week.
+    const now = new Date(Date.now() + 60_000);
+    const week = generationWeek(now, "UTC");
     const period = async (b: number, n: number, jobState = "complete") => {
       await client.query("INSERT INTO generation_periods(business_id,period_start,timezone,target,allocated,completed) VALUES($1,$2,'UTC',$3,$3,$3)", [b, week, n]);
       for (let i = 0; i < n; i++) {
@@ -29,7 +33,6 @@ async function main() {
       }
     };
     await period(ba, 3); await period(bb, 2, "running");
-    const now = new Date("2026-10-30T12:00:00Z");
 
     // Token endpoints: validation, ownership, refresh.
     const sa = (await createMobileSession("push-a")).token, sb = (await createMobileSession("push-b")).token;
