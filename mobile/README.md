@@ -36,9 +36,12 @@ API URL (development falls back to `http://localhost:3000`). Preview and product
 builds must set `EXPO_PUBLIC_API_BASE_URL`; there is no hard-coded secret, and the
 app only talks to our API.
 
-The app has five screens: a launch gate driven by `GET /api/mobile/config`, sign-in,
-an "update required" screen, the weekly queue (`#86`) and a draft detail with the
-share-sheet flow (`#87`). Sign-in is Google in production (`#85`/`#81`); a
+The app has six screens: a launch gate driven by `GET /api/mobile/config`, sign-in,
+an "update required" screen, the weekly queue (`#86`), a draft detail with the
+share-sheet flow (`#87`) and the profile screen (`#151`), reached from the initials
+avatar in the queue header. The profile shows the owner's name and email (the name
+is editable, the email is not), the plan and this week's usage, the app version and
+API server, and **Sign out**. Sign-in is Google in production (`#85`/`#81`); a
 development server with `MOBILE_DEV_AUTH=1` also offers a demo owner, which is the
 fastest way to walk the whole flow with synthetic data:
 
@@ -71,8 +74,9 @@ CI runs the same commands in the `mobile` job. Tests cover the API client's erro
 mapping (401/409/429/network/timeout), the version gate, the keychain session store,
 draft/version API shapes, queue list states and generation progress, the draft
 image cache (bearer header, shared downloads, retry, eviction and the 401 path),
-and every share-flow branch (unavailable share sheet, download/copy/share
-failures, cancelled share, version conflict, expired session).
+the profile helpers and API wrapper (name rule, initials, 400/401), and every
+share-flow branch (unavailable share sheet, download/copy/share failures,
+cancelled share, version conflict, expired session).
 
 ## Builds
 
