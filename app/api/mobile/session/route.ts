@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyGoogleIdToken } from "../../../../lib/googleIdToken";
 import { findOrCreateGoogleOwner, recordFailure, tooManyFailures } from "../../../../lib/mobileSignIn";
 import { createMobileSession } from "../../../../lib/mobileSessions";
+import { clientIp } from "../../../../lib/requestIp";
 
 // Reads at most `max` bytes of the stream, so a missing or false Content-Length cannot make us buffer more.
 async function readLimited(req: NextRequest, max: number) {
@@ -23,10 +24,8 @@ async function readLimited(req: NextRequest, max: number) {
 export async function POST(req: NextRequest) {
   const reply = (status: number, body: object) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
   try {
-    // Client-supplied IP headers are only trustworthy behind a proxy that overwrites them (the pilot's
-    // Cloudflare Tunnel, which sets TRUST_PROXY_HEADERS=1). Otherwise every caller shares one bucket.
-    const trusted = process.env.TRUST_PROXY_HEADERS === "1";
-    const client = trusted ? req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown" : "untrusted";
+    // Client-supplied IP headers are only trustworthy behind a proxy that overwrites them.
+    const client = clientIp(req);
     if (tooManyFailures(client)) return reply(429, { error: "Too many failed sign-in attempts; try again later" });
     let idToken: unknown;
     try { idToken = JSON.parse(await readLimited(req, 8192))?.idToken; } catch { /* handled below */ }

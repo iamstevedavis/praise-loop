@@ -9,12 +9,14 @@ export const DEV_OWNER_ID = "dev-owner";
 export const DEV_OWNER_EMAIL = "demo@praiseloop.invalid";
 export const DEV_OWNER_NAME = "Demo Owner";
 
-// The seeder also creates a Free owner so the plan limits and watermark can be seen.
-// `pro` is the default demo owner above. `free` has no name on purpose (#149), so
-// the profile empty state can be walked; the seeder clears it on every run.
+// The seeder also creates a Free owner so the plan limits and watermark can be seen, and an
+// email-only owner so the email-code sign-in (#157) can be walked without a mailbox. `pro` is
+// the default demo owner above. `free` has no name on purpose (#149), so the profile empty
+// state can be walked; the seeder clears it on every run.
 export const DEV_OWNERS = {
   pro: { id: DEV_OWNER_ID, email: DEV_OWNER_EMAIL, name: DEV_OWNER_NAME },
-  free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: null as string | null }
+  free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: null as string | null },
+  email: { id: "dev-owner-email", email: "demo-email@praiseloop.invalid", name: "Demo Email Owner", provider: "email" as const }
 } as const;
 export type DevOwnerKey = keyof typeof DEV_OWNERS;
 
@@ -31,12 +33,14 @@ export async function ensureDevOwner(which: DevOwnerKey = "pro"): Promise<string
      ON CONFLICT(id) DO NOTHING`,
     [owner.id, owner.name, owner.email]
   );
-  // A demo owner is signed in without a real provider, but the profile's linked
-  // methods list should still show one so the unlink rules can be walked (#156).
+  // A demo owner is signed in without a real provider, but the profile's linked methods list
+  // should still show one so the unlink rules can be walked (#156). The email-only owner has the
+  // same auth_accounts row a real email sign-in creates; the others get a synthetic Google one.
+  const emailOnly = "provider" in owner && owner.provider === "email";
   await query(
     `INSERT INTO auth_accounts(provider,provider_account_id,owner_id,email,created_at,last_used_at)
-     VALUES('google',$1,$2,$3,now(),now()) ON CONFLICT(provider,provider_account_id) DO NOTHING`,
-    [`dev-google-${owner.id}`, owner.id, owner.email]
+     VALUES($1,$2,$3,$4,now(),now()) ON CONFLICT(provider,provider_account_id) DO NOTHING`,
+    emailOnly ? ["email", owner.email, owner.id, owner.email] : ["google", `dev-google-${owner.id}`, owner.id, owner.email]
   );
   return owner.id;
 }

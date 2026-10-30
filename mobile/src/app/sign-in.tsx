@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Redirect, router } from "expo-router";
 import { api } from "../api";
+import { ApiError } from "../api/client";
 import { fetchMobileConfig, type MobileConfig } from "../api/config";
 import { useSession } from "../auth/SessionProvider";
 import { appConfig } from "../config";
@@ -9,11 +10,16 @@ import { Banner, Button } from "../ui/components";
 import { colors } from "../ui/theme";
 
 export default function SignInScreen() {
-  const { status, sessionEnded, signInDemo } = useSession();
+  const { status, sessionEnded, signInDemo, signInEmail } = useSession();
   const [config, setConfig] = useState<MobileConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [emailStage, setEmailStage] = useState<"email" | "code">("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [cooldown, setCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,6 +28,12 @@ export default function SignInScreen() {
       .catch(() => { if (!cancelled) setConfigError("Can’t reach the PraiseLoop server. Check that it is running and that the app points at your machine."); });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown(value => value - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const demo = useCallback(async () => {
     setBusy(true);
@@ -35,6 +47,46 @@ export default function SignInScreen() {
       setBusy(false);
     }
   }, [signInDemo]);
+
+  const sendCode = useCallback(async () => {
+    if (busy) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await api.request("/api/auth/email/request", { method: "POST", body: { email: email.trim() } });
+      setEmailStage("code");
+      setCooldown(60);
+      setNotice("If that address can sign in, we’ve sent a code. It expires in 10 minutes.");
+    } catch (cause) {
+      setError(cause instanceof ApiError && cause.status === 429
+        ? "Too many attempts. Try again later."
+        : cause instanceof Error ? cause.message : "Could not send a code; try again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, email]);
+
+  const verifyCode = useCallback(async () => {
+    if (busy) return;
+    if (!/^\d{6}$/.test(code.trim())) {
+      setError("Enter the 6-digit code from the email.");
+      return;
+    }
+    setBusy(true); setError(null);
+    try {
+      await signInEmail(email.trim(), code.trim());
+      router.replace("/queue");
+    } catch (cause) {
+      setError(cause instanceof ApiError && cause.status === 429
+        ? "Too many attempts. Try again later."
+        : cause instanceof Error ? cause.message : "That code is invalid or has expired.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, code, email, signInEmail]);
 
   if (status === "signedIn") return <Redirect href="/queue" />;
 
@@ -50,15 +102,67 @@ export default function SignInScreen() {
       {sessionEnded ? <Banner message="Your session ended. Sign in again." tone="warning" /> : null}
       {configError ? <Banner message={configError} tone="danger" /> : null}
       {error ? <Banner message={error} tone="danger" /> : null}
+      {notice ? <Banner message={notice} /> : null}
       {config === null && !configError ? <ActivityIndicator /> : null}
+
+      <View style={styles.form}>
+        <Text style={styles.label}>Sign in with email</Text>
+        <TextInput
+          style={[styles.input, emailStage === "code" && styles.inputMuted]}
+          value={email}
+          onChangeText={setEmail}
+          editable={emailStage === "email" && !busy}
+          placeholder="you@yourbusiness.com"
+          inputMode="email"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          textContentType="emailAddress"
+          accessibilityLabel="Email address"
+        />
+        {emailStage === "code" ? (
+          <TextInput
+            style={styles.input}
+            value={code}
+            onChangeText={value => setCode(value.replace(/\D/g, "").slice(0, 6))}
+            editable={!busy}
+            placeholder="6-digit code"
+            inputMode="numeric"
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
+            maxLength={6}
+            accessibilityLabel="6-digit sign-in code"
+          />
+        ) : null}
+        <Button
+          label={emailStage === "email" ? "Email me a code" : "Sign in"}
+          onPress={() => { void (emailStage === "email" ? sendCode() : verifyCode()); }}
+          loading={busy}
+        />
+        {emailStage === "code" ? (
+          <>
+            <Button
+              label={cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
+              kind="secondary"
+              disabled={busy || cooldown > 0}
+              onPress={() => { void sendCode(); }}
+            />
+            <Button
+              label="Use a different address"
+              kind="secondary"
+              disabled={busy}
+              onPress={() => { setEmailStage("email"); setCode(""); setError(null); setNotice(null); setCooldown(0); }}
+            />
+          </>
+        ) : null}
+      </View>
 
       {config?.devAuth ? (
         <View style={styles.actions}>
           <Banner message="Demo mode: this server signs in a synthetic owner with seeded posts. No Google account is involved." tone="warning" />
-          <Button label="Sign in as demo owner" onPress={() => { void demo(); }} loading={busy} />
+          <Button label="Sign in as demo owner" onPress={() => { void demo(); }} loading={busy} kind="secondary" />
         </View>
-      ) : config ? (
-        <Banner message="Google sign-in arrives with the next app update. Set MOBILE_DEV_AUTH=1 on a development server to try the demo owner." />
       ) : null}
 
       {appConfig.variant !== "production" ? (
@@ -73,6 +177,10 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 13, fontWeight: "700", letterSpacing: 1.4, textTransform: "uppercase", color: colors.muted },
   title: { fontSize: 34, lineHeight: 40, fontWeight: "700", color: colors.ink },
   body: { fontSize: 16, lineHeight: 23, color: colors.muted },
+  form: { gap: 10, marginTop: 8 },
+  label: { fontSize: 14, fontWeight: "700", color: colors.ink },
+  input: { minHeight: 48, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, color: colors.ink, backgroundColor: colors.surface },
+  inputMuted: { color: colors.muted },
   actions: { gap: 12, marginTop: 8 },
   small: { fontSize: 12, color: colors.faint, marginTop: 12 }
 });

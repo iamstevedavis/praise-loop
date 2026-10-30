@@ -3,7 +3,8 @@ import { runSeed } from "./seed/seed";
 
 // Synthetic data for walking the phone flow end to end without OpenAI, Google
 // OAuth or a review provider: three businesses with imported reviews and drafts in
-// every status, a Pro and a Free owner, a push token and a Google connection stub.
+// every status, a Pro, a Free and an email-only owner, a push token and a Google
+// connection stub.
 // Refuses to run against a production process or a non-local DATABASE_URL, and
 // replaces only the two demo owners' rows, so no real owner's data is touched.
 // The data lives in scripts/seed/fixtures.ts and sample-data/csv/.
