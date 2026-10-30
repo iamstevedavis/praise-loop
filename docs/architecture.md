@@ -65,9 +65,10 @@ Define and maintain the core stack in this section as the source of truth:
   `1.0.0`, `1.0.0`, none). Below `minimumVersion` the app shows an update screen.
   `devAuth` is `true` only in a development process with `MOBILE_DEV_AUTH=1`, and
   tells the app it may show the demo sign-in button.
-  The response is cacheable for a short time and carries no cookies. It and the
-  gated `POST /api/mobile/session/dev` are the only unauthenticated routes besides
-  NextAuth's handlers.
+  The response is cacheable for a short time and carries no cookies. It,
+  `POST /api/mobile/session/dev` (development only) and the three public
+  email-sign-in routes in `docs/auth.md` are the only unauthenticated routes
+  besides NextAuth's handlers.
 
 ### State machine (draft lifecycle)
 

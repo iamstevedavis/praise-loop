@@ -5,6 +5,9 @@
 .headline { margin: 0; font-size: clamp(40px, 5.5vw, 64px); line-height: 1.02; font-weight: 800; letter-spacing: -0.03em; }
 .lede { margin: 0; max-width: 520px; font-size: 19px; line-height: 1.55; color: var(--pl-ink-soft); }
 .cta { display: flex; flex-direction: column; gap: 12px; }
+.email { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 380px; padding: 16px; border: 1px solid var(--pl-line); border-radius: 14px; background: var(--pl-surface); }
+.email p { margin: 0; }
+.emailLinks { display: flex; flex-wrap: wrap; gap: 6px; }
 .sample { flex: 0 1 380px; aspect-ratio: 1 / 1; padding: 34px; border-radius: 22px; background: #5B2A44; color: #FFFFFF; display: flex; flex-direction: column; justify-content: space-between; transform: rotate(-2deg); box-shadow: 0 24px 60px rgba(23, 32, 28, 0.18); }
 .stars { color: var(--pl-marigold); font-size: 24px; letter-spacing: 2px; }
 .quote { margin: 0; font-family: var(--pl-display); font-size: clamp(22px, 2.6vw, 30px); line-height: 1.2; font-weight: 600; }

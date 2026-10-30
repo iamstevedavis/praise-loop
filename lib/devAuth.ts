@@ -9,12 +9,14 @@ export const DEV_OWNER_ID = "dev-owner";
 export const DEV_OWNER_EMAIL = "demo@praiseloop.invalid";
 export const DEV_OWNER_NAME = "Demo Owner";
 
-// The seeder also creates a Free owner so the plan limits and watermark can be seen.
-// `pro` is the default demo owner above.
+// The seeder also creates a Free owner so the plan limits and watermark can be seen,
+// and an email-only owner so the email-code sign-in (#157) can be walked without a
+// mailbox. `pro` is the default demo owner above.
 export const DEV_OWNERS = {
   pro: { id: DEV_OWNER_ID, email: DEV_OWNER_EMAIL, name: DEV_OWNER_NAME },
-  free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: "Demo Free Owner" }
-} as const;
+  free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: "Demo Free Owner" },
+  email: { id: "dev-owner-email", email: "demo-email@praiseloop.invalid", name: "Demo Email Owner", provider: "email" as const }
+};
 export type DevOwnerKey = keyof typeof DEV_OWNERS;
 
 export function devAuthEnabled(env: Record<string, string | undefined> = process.env): boolean {
@@ -30,5 +32,12 @@ export async function ensureDevOwner(which: DevOwnerKey = "pro"): Promise<string
      ON CONFLICT(id) DO NOTHING`,
     [owner.id, owner.name, owner.email]
   );
+  // The email-only owner has the same auth_accounts row a real email sign-in creates.
+  if ("provider" in owner && owner.provider === "email") {
+    await query(
+      "INSERT INTO auth_accounts(provider,provider_account_id,owner_id) VALUES('email',$1,$2) ON CONFLICT DO NOTHING",
+      [owner.email, owner.id]
+    );
+  }
   return owner.id;
 }

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { isSignedOut } from "../api/client";
 import { sessionStore } from "./store";
-import { signInDemo as requestDemoSession, signOut as revokeSession } from "./session";
+import { signInDemo as requestDemoSession, signInWithEmail, signOut as revokeSession } from "./session";
 
 type SessionStatus = "loading" | "signedOut" | "signedIn";
 
@@ -12,6 +12,7 @@ type SessionValue = {
   // so the sign-in screen can say why.
   sessionEnded: boolean;
   signInDemo: () => Promise<void>;
+  signInEmail: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
   // Call from a screen's catch: a 401 clears the keychain and returns the app to
   // sign-in, which is what the API means by "session ended".
@@ -53,6 +54,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus("signedIn");
   }, []);
 
+  const signInEmail = useCallback(async (email: string, code: string) => {
+    await signInWithEmail(email, code);
+    setToken(sessionStore.current());
+    setSessionEnded(false);
+    setStatus("signedIn");
+  }, []);
+
   const signOut = useCallback(async () => {
     await revokeSession();
     setToken(null);
@@ -72,8 +80,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [expire]);
 
   const value = useMemo(
-    () => ({ status, token, sessionEnded, signInDemo, signOut, handleError, expire }),
-    [status, token, sessionEnded, signInDemo, signOut, handleError, expire]
+    () => ({ status, token, sessionEnded, signInDemo, signInEmail, signOut, handleError, expire }),
+    [status, token, sessionEnded, signInDemo, signInEmail, signOut, handleError, expire]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

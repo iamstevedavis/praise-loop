@@ -72,7 +72,7 @@ async function main() {
       const first = await runSeed();
       const one = await snapshot(client, media);
 
-      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-free": "free" });
+      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-free": "free", "dev-owner-email": "free" });
       assert.equal(first.businesses.length, SEED_BUSINESSES.length);
       const seeded = one.businesses.filter(b => b.owner_id !== "real-owner");
       assert.deepEqual(seeded.map(b => b.name).sort(), SEED_BUSINESSES.map(b => b.name).sort());
@@ -80,6 +80,8 @@ async function main() {
       assert.deepEqual(first.businesses.map(b => b.reviews), [21, 24, 17], "every CSV row is imported");
       assert.equal((await entitlementsFor("dev-owner")).plan, "pro");
       assert.equal((await entitlementsFor("dev-owner-free")).plan, "free");
+      assert.equal((await entitlementsFor("dev-owner-email")).plan, "free");
+      assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider='email' AND owner_id='dev-owner-email'")).rows[0].n, 1);
       assert.equal(one.owners.every(o => String(o.email).endsWith(".invalid")), true, "synthetic emails only");
 
       // Reviews span ratings and dates; the Hespeler CSV came in through the same import.

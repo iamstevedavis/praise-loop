@@ -88,6 +88,7 @@ answers 404 for the demo sign-in even if the flag is set.
    | --- | --- | --- |
    | `dev-owner` (`demo@praiseloop.invalid`) | Pro | Copper Kettle Café (21 reviews, 7 drafts), Hespeler Powder Coating (24 reviews, 6 drafts) |
    | `dev-owner-free` (`demo-free@praiseloop.invalid`) | Free | Harbour Bike Repair (17 reviews, 3 drafts) |
+   | `dev-owner-email` (`demo-email@praiseloop.invalid`) | Free | None; an email-only owner for walking email sign-in |
 
    Each business has its own timezone and branding. The reviews (ratings 1 to 5
    across several months) are loaded from `sample-data/csv/` through the same
@@ -100,7 +101,7 @@ answers 404 for the demo sign-in even if the flag is set.
    The fake push token may make the worker contact Expo once; Expo rejects it and
    the token is dropped.
 
-   The seed is idempotent. Running it again replaces only the two demo owners'
+   The seed is idempotent. Running it again replaces only the three demo owners'
    businesses (and everything under them, plus their images) and leaves other
    owners alone; ids change, content does not. To reset, run it again. To remove
    the demo data, delete those owners' businesses, or drop the dev database
@@ -173,9 +174,16 @@ Outside production `EMAIL_TRANSPORT` defaults to `fake`, so nothing is sent and 
 key is needed. Each message is kept in the process's in-memory outbox and logged
 once as `email_outbox {json}` with its recipient, subject and body; read a sign-in
 code from that line (`docker compose logs -f web`, or the terminal running
-`npm run dev`). Tests also use the fake transport or a mocked `fetch`, so they never
-reach the network; select `resend` explicitly outside production only when trying a
-real send.
+`npm run dev`), or open `http://localhost:3000/dev/outbox`. That page exists only in a
+development process using the fake transport. Tests also use the fake transport or a
+mocked `fetch`, so they never reach the network; select `resend` explicitly outside
+production only when trying a real send.
+
+During email sign-in, request a code from the landing page or the phone sign-in screen
+and read it at `/dev/outbox` or from the log line. The code expires after ten minutes
+and can be used once; a newer request replaces it. The seeder's `dev-owner-email`
+(`demo-email@praiseloop.invalid`) is an email-only owner, so signing in with that
+address walks the returning-owner path and the empty account it lands on.
 
 For a real send, complete the owner steps in [integrations.md](integrations.md) and
 set `EMAIL_TRANSPORT=resend`, `EMAIL_FROM` (on the verified domain) and
