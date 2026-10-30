@@ -31,7 +31,8 @@ const nav: { href: string; label: string; icon: IconName; match: string[] }[] = 
   { href: "/approval", label: "This week", icon: "week", match: ["/approval"] },
   { href: "/schedule", label: "Schedule", icon: "calendar", match: ["/schedule"] },
   { href: "/reviews", label: "Reviews", icon: "reviews", match: ["/reviews", "/quotes"] },
-  { href: "/brand", label: "Brand", icon: "palette", match: ["/brand"] }
+  { href: "/brand", label: "Brand", icon: "palette", match: ["/brand"] },
+  { href: "/account", label: "Plan", icon: "user", match: ["/account"] }
 ];
 
 function readStored() { try { return localStorage.getItem(storageKey); } catch { return null; } }

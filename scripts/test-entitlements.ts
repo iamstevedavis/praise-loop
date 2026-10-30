@@ -7,6 +7,8 @@ import sharp from "sharp";
 import { databaseFixture } from "./db-fixture";
 import { sessionHash } from "../lib/auth-adapter";
 import { PLAN_LIMITS, entitlementsFor, entitlementsForPlan, setOwnerPlan } from "../lib/services/entitlements";
+import { expiryNote, quotaMetMessage } from "../lib/planDisplay";
+import { entitlementsWithUsage, localMidnight, weeklyUsage } from "../lib/services/planUsage";
 import { processGeneration, requestGeneration, type GenerationDeps } from "../lib/services/generation";
 import { renderDraftImage } from "../lib/services/imageRenderer";
 
@@ -22,6 +24,17 @@ async function main() {
     const expiredPlan = entitlementsForPlan("pro", "manual", "2020-01-01T00:00:00Z", new Date("2026-01-01T00:00:00Z"));
     assert.equal(expiredPlan.plan, "free");
     assert.equal(expiredPlan.limits.watermark, true);
+
+    // Week reset is local midnight Monday in the business's timezone, across daylight saving.
+    assert.equal(localMidnight("2026-10-26", "UTC").toISOString(), "2026-10-26T00:00:00.000Z");
+    assert.equal(localMidnight("2026-10-26", "America/New_York").toISOString(), "2026-10-26T04:00:00.000Z");
+    assert.equal(localMidnight("2026-11-02", "America/New_York").toISOString(), "2026-11-02T05:00:00.000Z", "after the fall-back change");
+    assert.equal(localMidnight("2026-10-19", "Pacific/Auckland").toISOString(), "2026-10-18T11:00:00.000Z");
+    const nyUsage = weeklyUsage({ id: 7, name: "NY", timezone: "America/New_York", weekly_target: 3 }, 1, entitlementsForPlan("free", "default", null), new Date("2026-10-29T12:00:00Z"));
+    assert.equal(nyUsage.weekStart, "2026-10-26");
+    assert.equal(nyUsage.resetsOn, "2026-11-02");
+    assert.equal(nyUsage.resetsAt, "2026-11-02T05:00:00.000Z");
+    assert.equal(nyUsage.quotaMet, true);
 
     await databaseFixture(async (c) => {
       await c.query(`INSERT INTO auth_users(id,email) VALUES
@@ -114,6 +127,46 @@ async function main() {
       assert.equal(body.plan, "free", "the app can read but not change its own plan");
       assert.equal(body.limits.postsPerWeek, 1);
       assert.equal(response.headers.get("cache-control"), "private, no-store");
+
+      // Weekly usage on the same endpoint. Free owner, nothing generated yet: 0 of the 1-post cap.
+      const usageOf = (payload: any) => payload.usage[0];
+      assert.equal(body.usage.length, 1);
+      assert.deepEqual({ ...usageOf(body), weekStart: undefined, resetsOn: undefined, resetsAt: undefined }, {
+        businessId: Number(apiBusiness), name: "API synthetic", timezone: "UTC", weekStart: undefined, resetsOn: undefined, resetsAt: undefined,
+        allocated: 0, target: 1, weeklyTarget: 3, quotaMet: false
+      });
+      assert.equal(quotaMetMessage(body, usageOf(body)), null);
+      // Quota met: the route reports the used-up week and the message names the Free limit.
+      await c.query("INSERT INTO generation_periods(business_id,period_start,timezone,target,allocated,completed) VALUES($1,$2,'UTC',1,1,1)", [apiBusiness, usageOf(body).weekStart]);
+      const metBody = await (await entitlementsRoute.GET(request("/api/entitlements"))).json();
+      assert.equal(usageOf(metBody).allocated, 1);
+      assert.equal(usageOf(metBody).quotaMet, true);
+      assert.match(quotaMetMessage(metBody, usageOf(metBody))!, /Free plan includes 1 post a week/);
+      assert.equal(expiryNote(metBody, now), null);
+
+      // Pro with the full quota used: the target is the owner's own, so the message names the Pro allowance.
+      const proUsage = (await entitlementsWithUsage("pro-owner", now)).usage[0];
+      assert.equal(proUsage.allocated, 5);
+      assert.equal(proUsage.target, 5);
+      assert.equal(proUsage.quotaMet, true);
+      const proPlan = await entitlementsWithUsage("pro-owner", now);
+      assert.match(quotaMetMessage(proPlan, proUsage)!, /made all 5 posts.*Pro plan allows up to 5/);
+
+      // A Free owner who asked for 3 is held to 1 by the plan, even though 3 drafts were allocated while on Pro.
+      const downgraded = await entitlementsWithUsage("free-owner", now);
+      assert.equal(downgraded.plan, "free");
+      assert.equal(downgraded.usage[0].allocated, 3);
+      assert.equal(downgraded.usage[0].target, 1);
+      assert.equal(downgraded.usage[0].weeklyTarget, 3);
+
+      // Expired Pro reads as Free with an expiry note, and usage follows the Free cap.
+      await business("expired-owner", "Expired synthetic");
+      const expiredView = await entitlementsWithUsage("expired-owner", now);
+      assert.equal(expiredView.plan, "free");
+      assert.equal(expiredView.usage[0].target, 1);
+      assert.equal(expiredView.usage[0].allocated, 0);
+      assert.equal(expiryNote(expiredView, now), "Your Pro plan expired on 2020-01-01, so you are on the Free plan.");
+      assert.equal(expiryNote(await entitlementsWithUsage("pro-owner", now), now), null, "an open-ended Pro plan has no expiry note");
 
       const businessesRoute = require("../app/api/businesses/route");
       const retried = await businessesRoute.POST(request("/api/businesses", "POST", { name: "Retried synthetic", timezone: "UTC", onboardingKey }));
