@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
 import PostCard, { stageOf, type Draft, type Stage } from "./PostCard";
@@ -24,7 +25,7 @@ export default function ThisWeekPage() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (id: number | string) => {
-    const res = await fetch(`/api/drafts?businessId=${id}`);
+    const res = await apiFetch(`/api/drafts?businessId=${id}`);
     if (!res.ok) return;
     const data = await res.json();
     setDrafts(data.drafts ?? []);
@@ -47,7 +48,7 @@ export default function ThisWeekPage() {
   async function run(path: string, draft: Draft, extra: Record<string, unknown> = {}) {
     setBusy(true);
     try {
-      const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ draftPostId: draft.id, version: draft.version, ...extra }) });
+      const response = await apiFetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ draftPostId: draft.id, version: draft.version, ...extra }) });
       const data = await response.json();
       if (response.ok) {
         const done: Record<string, string> = {
@@ -75,7 +76,7 @@ export default function ThisWeekPage() {
     setBusy(true);
     try {
       const items = groups.ready.map(d => ({ draftPostId: d.id, version: d.version }));
-      const response = await fetch("/api/drafts/bulk", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ items }) });
+      const response = await apiFetch("/api/drafts/bulk", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ items }) });
       const data = await response.json();
       if (!data.results) { setMessage(data.error ?? "That didn’t work — try again"); return; }
       const results = data.results as { draftPostId: number; status: number; error?: string }[];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "../apiFetch";
 
 type Business = { id: number; name: string };
 type Draft = {
@@ -24,14 +25,14 @@ export default function QuotesPage() {
   const [renderingDraftId, setRenderingDraftId] = useState<number | null>(null);
 
   async function loadBusinesses() {
-    const res = await fetch("/api/businesses");
+    const res = await apiFetch("/api/businesses");
     const data = await res.json();
     setBusinesses(data.businesses ?? []);
   }
 
   async function loadDrafts(id: string) {
     if (!id) return setDrafts([]);
-    const res = await fetch(`/api/drafts?businessId=${id}`);
+    const res = await apiFetch(`/api/drafts?businessId=${id}`);
     const data = await res.json();
     setDrafts(data.drafts ?? []);
   }
@@ -45,7 +46,7 @@ export default function QuotesPage() {
 
   async function runSelector() {
     if (!businessId) return;
-    const res = await fetch("/api/quotes/select", {
+    const res = await apiFetch("/api/quotes/select", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ businessId: Number(businessId), limit })
@@ -62,7 +63,7 @@ export default function QuotesPage() {
   async function generateCaptions(draftPostId: number) {
     setLoadingDraftId(draftPostId);
     try {
-      const res = await fetch("/api/captions/generate", {
+      const res = await apiFetch("/api/captions/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ draftPostId, version: drafts.find(d=>d.id===draftPostId)?.version })
@@ -80,7 +81,7 @@ export default function QuotesPage() {
   }
 
   async function chooseCaption(draftPostId: number, captionText: string) {
-    const res = await fetch("/api/drafts/caption", {
+    const res = await apiFetch("/api/drafts/caption", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ draftPostId, version: drafts.find(d=>d.id===draftPostId)?.version, captionText })
@@ -97,7 +98,7 @@ export default function QuotesPage() {
   async function renderImage(draftPostId: number) {
     setRenderingDraftId(draftPostId);
     try {
-      const res = await fetch("/api/images/render", {
+      const res = await apiFetch("/api/images/render", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ draftPostId, version: drafts.find(d=>d.id===draftPostId)?.version })
