@@ -111,7 +111,8 @@ shared server. Production sign-in remains the Google exchange above.
 
 Profile (#149): `GET /api/profile` returns the signed-in owner's `name` (nullable),
 `email`, `nameSource` (`provider`, `owner`, or null when there is no name), `provider`
-(always `google`: it is the only owner provider) and `initials` for an avatar. It
+(the owner's linked sign-in method, Google first when there are several, or null
+when none is linked) and `initials` for an avatar. It
 never returns provider tokens and keeps `Cache-Control: private, no-store`.
 `PATCH /api/profile` accepts only `{ "name": "..." }`: trimmed, 1–80 characters, no
 control characters, and 400 otherwise. The email is read-only because it is the

@@ -79,6 +79,12 @@ async function main() {
     const otherProfile = await (await route.GET(webRequest("/api/profile", "GET", undefined, "other-session"))).json();
     assert.equal(otherProfile.name, "Other Owner");
     assert.equal(otherProfile.email, "other@example.invalid");
+    assert.equal(otherProfile.provider, null, "an owner with no linked method reports none instead of claiming Google");
+    // The provider is the owner's real method, Google first when there are several.
+    await authAdapter.linkAccount!({ userId: other.id, type: "oauth", provider: "email", providerAccountId: "other@example.invalid" });
+    assert.equal((await (await route.GET(webRequest("/api/profile", "GET", undefined, "other-session"))).json()).provider, "email");
+    await authAdapter.linkAccount!({ userId: other.id, type: "oauth", provider: "google", providerAccountId: "google-other" });
+    assert.equal((await (await route.GET(webRequest("/api/profile", "GET", undefined, "other-session"))).json()).provider, "google");
     assert.equal((await route.GET(webRequest("/api/profile", "GET", undefined, "other-session", "https://foreign.invalid"))).status, 200, "reads need no origin");
 
     // The owner sets their name; it is trimmed and recorded as owner-set.
