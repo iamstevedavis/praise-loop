@@ -173,6 +173,8 @@ Pricing is set after the pilot. The split, to start:
   first as the [contributing rules](../CONTRIBUTING.md) require.
 - A web checkout (for example Stripe) can come later for owners who sign up on the
   web. It isn't needed for the pilot.
+- The public `/plans` page (#134) shows only the enforced limits, with no prices,
+  until the Free/Pro prices are recorded in `docs/decisions.md`.
 
 ## Hosting
 

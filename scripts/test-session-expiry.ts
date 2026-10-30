@@ -32,6 +32,8 @@ async function pure() {
   assert.equal(isSessionExpiry({ status: 401, url: "/api/reviews/import", pathname: "/reviews" }), true);
   // Loop guards: landing page, NextAuth endpoints, the phone app's routes, foreign URLs.
   assert.equal(isSessionExpiry({ status: 401, url: "/api/businesses", pathname: "/" }), false);
+  // The public plans page also loads business state; a signed-out visitor must stay there.
+  assert.equal(isSessionExpiry({ status: 401, url: "/api/businesses", pathname: "/plans" }), false);
   for (const url of ["/api/auth/session", "/api/auth/csrf", "/api/auth/signout", "/api/auth", "/api/mobile/config", "/api/mobile/session", "https://example.invalid/api/drafts", "//example.invalid/api/drafts", "/other"]) {
     assert.equal(isProtectedApiPath(url), false, url);
     assert.equal(isSessionExpiry({ status: 401, url, pathname: "/approval" }), false, url);

@@ -28,6 +28,7 @@ export default function HomePage() {
     <div className={styles.page}>
       <header className={styles.bar}>
         <Link href="/" className="pl-brand"><span className="pl-brand-mark"><Icon name="loop" strokeWidth={2.2} /></span>PraiseLoop</Link>
+        <Link href="/plans" className="pl-small">Plans</Link>
       </header>
       <main className={styles.hero}>
         <section className={styles.copy}>
@@ -40,6 +41,7 @@ export default function HomePage() {
               Continue with Google
             </button>
             <span className="pl-muted pl-small">Nothing posts without your OK.</span>
+            <Link href="/plans" className="pl-small">See what each plan includes</Link>
           </div>
         </section>
         <div className={styles.sample} role="img" aria-label="Example quote card: The sourdough is unreal and they remember my order every single time. — Priya S.">

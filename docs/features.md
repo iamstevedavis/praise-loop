@@ -277,3 +277,30 @@ The script resolves an email or business to the owner and records the actor,
 reason and expiry in `owner_plan_events`. Payment-provider purchases will use
 the same module from a verified webhook (#95). Migration 012 is additive;
 rollback can leave the plan tables in place while reverting the checks.
+
+### Public plans page (#134)
+
+`/plans` is public: a signed-out visitor sees the Free and Pro cards, what
+differs (posts each week per business, templates, watermark, review sync, AI
+replies, businesses) and a "Continue with Google" call to action. The landing
+page links to it from the header and the call to action. `AppShell` treats
+`/plans` as a bare route, like `/` and onboarding, so the signed-out sign-in
+wall does not hide it.
+
+- The comparison is worded in `lib/plansDisplay.ts` and rendered from
+  `PLAN_LIMITS` in `lib/services/entitlements.ts`; the page keeps no copy of the
+  numbers. `scripts/test-plans.ts` fails when a limit changes, when a new limit
+  has no row, or when a row stops matching the expected wording.
+- Prices stay off the page (`PLAN_PRICING = null`) until the owner records the
+  Free/Pro prices in `docs/decisions.md`. The test fails if a pricing decision is
+  recorded without prices, or if a price appears before one is.
+- Wording is honest about what ships: Free's small watermark is stated plainly,
+  review sync and AI replies read "Planned — not available yet", and a note says
+  only one template design exists today. Nothing implies posting is connected or
+  that there is a checkout.
+- There is no payment, web checkout, promo code or plan-change control here;
+  plans are still changed by operators or a store webhook (#95).
+- A 401 while signed out does not redirect off `/plans` (`lib/sessionExpiry.ts`
+  treats `/` and `/plans` as public pages), so a visitor can read the plans and
+  then choose "Continue with Google".
+
