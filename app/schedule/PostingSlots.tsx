@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { apiFetch } from "../apiFetch";
 
 type Slot = { weekday: number; time: string };
 type Approved = { id: number; version: number; quote_text: string; author_name?: string | null };
@@ -12,7 +13,7 @@ export default function PostingSlots({ businessId, approved, onAssigned }: { bus
   const [selected, setSelected] = useState<Record<number, boolean>>({}), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
 
   async function load(isCurrent: () => boolean = () => true) {
-    const response = await fetch(`/api/posting-slots?businessId=${businessId}`);
+    const response = await apiFetch(`/api/posting-slots?businessId=${businessId}`);
     const data = await response.json();
     if (!isCurrent()) return;
     if (!response.ok) { setMessage(data.error); return; }
@@ -23,7 +24,7 @@ export default function PostingSlots({ businessId, approved, onAssigned }: { bus
   async function save() {
     setBusy(true);
     try {
-      const response = await fetch("/api/posting-slots", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ businessId, settings }) });
+      const response = await apiFetch("/api/posting-slots", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ businessId, settings }) });
       const data = await response.json();
       setMessage(response.ok ? "Posting times saved. Posts already sent keep their original times." : data.error);
       if (response.ok) await load();
@@ -36,7 +37,7 @@ export default function PostingSlots({ businessId, approved, onAssigned }: { bus
     setBusy(true);
     try {
       const items = chosen.map((d, i) => ({ draftPostId: d.id, version: d.version, instant: slots[i] }));
-      const response = await fetch("/api/posting-slots/assign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ businessId, confirm: true, items }) });
+      const response = await apiFetch("/api/posting-slots/assign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ businessId, confirm: true, items }) });
       const data = await response.json();
       setMessage(data.results ? data.results.map((r: { draftPostId: number; status: number; error?: string }) => `Post #${r.draftPostId}: ${r.status === 200 ? "scheduled" : r.error}`).join("; ") : data.error);
       setSelected({});

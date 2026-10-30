@@ -108,3 +108,28 @@ synthetic drafts; a body of `{"owner":"free"}` signs in as the seeded Free owner
 instead of the default Pro one. The demo owner has the same ownership checks, version conflicts and
 audit events as a real owner, so the flow is realistic; never enable the flag on a
 shared server. Production sign-in remains the Google exchange above.
+
+When the session ends (#137): the server side above is unchanged; every protected route
+answers 401. The clients now act on it.
+
+- Web: pages call our own API through `apiFetch` (`app/apiFetch.ts`), never bare `fetch`. On a
+  401 from a protected `/api/` route it stops the page's current action (the call never
+  resolves, so no "something went wrong" message flashes), clears the dead cookie with
+  `signOut({ redirect: false })`, then loads `/?reason=session-ended&callbackUrl=<current page>`.
+  The landing page shows "Your session ended. Sign in again." and its Google button returns to
+  that page (or goes there straight away if the owner is signed in again). 403, 404, 409, 429
+  and 5xx keep their own messages and never sign the owner out. Loop guards: a 401 on the
+  landing page, from `/api/auth/*` or from `/api/mobile/*` is ignored, several simultaneous
+  401s (polling) sign out once, and a failing or slow `signOut` never blocks the redirect. The
+  `callbackUrl` must be a same-site relative path. The decision logic is
+  `lib/sessionExpiry.ts`. When a tab regains focus (at most every 30 seconds) the shell makes
+  one `/api/businesses` call, so a tab left open overnight redirects without the owner acting
+  first. New pages must use `apiFetch` for `/api/` calls.
+- Phone: `api/client.ts` maps 401 to an `ApiError` of kind `signedOut`; every screen passes
+  its errors to `useSession().handleError`, which deletes the keychain token and returns to
+  sign-in, where a "Your session ended" banner explains why (not shown after a deliberate
+  sign-out).
+- Tests: `scripts/test-session-expiry.ts` (decision logic, the wrapper, and an expired cookie
+  session and revoked mobile token against the real drafts and import routes) and
+  `mobile/__tests__/sessionExpiry.test.ts`. No browser test was added, so the redirect itself
+  is covered only by the wrapper tests with a fake `navigate`.

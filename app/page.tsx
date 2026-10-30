@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { landingNotice } from "../lib/sessionExpiry";
 import { useBusiness } from "./AppShell";
 import Icon from "./ui/Icon";
 import styles from "./landing.module.css";
@@ -16,9 +17,12 @@ const steps = [
 export default function HomePage() {
   const router = useRouter();
   const { status, businesses } = useBusiness();
+  // Sent here by apiFetch when the session ended: say so, and return to the same page after sign-in.
+  const [notice, setNotice] = useState<ReturnType<typeof landingNotice>>({ message: null, callbackUrl: null });
+  useEffect(() => { setNotice(landingNotice(window.location.search)); }, []);
   useEffect(() => {
-    if (status === "ready") router.replace(businesses.length ? "/approval" : "/onboarding");
-  }, [status, businesses.length, router]);
+    if (status === "ready") router.replace(notice.callbackUrl ?? (businesses.length ? "/approval" : "/onboarding"));
+  }, [status, businesses.length, router, notice.callbackUrl]);
 
   return (
     <div className={styles.page}>
@@ -30,8 +34,9 @@ export default function HomePage() {
           <span className="pl-badge pl-badge-ready">For local businesses</span>
           <h1 className={styles.headline}>Your happy customers are your best marketing.</h1>
           <p className={styles.lede}>PraiseLoop turns your best reviews into on-brand social posts every week. You spend five minutes approving them. That’s it.</p>
+          {notice.message ? <p role="alert" className="pl-banner">{notice.message}</p> : null}
           <div className={styles.cta}>
-            <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("google", { callbackUrl: "/approval" })} disabled={status === "loading" || status === "ready"}>
+            <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("google", { callbackUrl: notice.callbackUrl ?? "/approval" })} disabled={status === "loading" || status === "ready"}>
               Continue with Google
             </button>
             <span className="pl-muted pl-small">Nothing posts without your OK.</span>

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import BrandPreview from "./BrandPreview";
 import { ColorPicker, readLogo, timezones, TonePicker, type BrandTone } from "./options";
@@ -31,7 +32,7 @@ export default function BrandPage() {
     if (!business) return;
     setBusy(true);
     try {
-      const response = await fetch(`/api/businesses/${business.id}`, {
+      const response = await apiFetch(`/api/businesses/${business.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

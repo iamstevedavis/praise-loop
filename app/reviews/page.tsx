@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
 
@@ -35,7 +36,7 @@ export default function ReviewsPage() {
   currentId.current = businessId;
 
   const load = useCallback(async (id: number | string, isCurrent: () => boolean = () => true) => {
-    const response = await fetch(`/api/reviews?businessId=${id}`);
+    const response = await apiFetch(`/api/reviews?businessId=${id}`);
     if (!response.ok || !isCurrent()) return;
     const data = await response.json();
     setReviews(data.reviews ?? []);
@@ -59,7 +60,7 @@ export default function ReviewsPage() {
     formData.set("businessId", String(businessId));
     setBusy(true);
     try {
-      const response = await fetch("/api/reviews/import", { method: "POST", body: formData });
+      const response = await apiFetch("/api/reviews/import", { method: "POST", body: formData });
       const data = await response.json();
       // The owner may have switched business while the upload ran; don't show A's results under B.
       if (!stillCurrent()) return;
