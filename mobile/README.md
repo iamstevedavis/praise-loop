@@ -12,6 +12,11 @@ of the root `package.json` and is never part of the web Docker build.
 
 ## Run it
 
+With the dev stack (`docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
+from the repo root) the `mobile` service already runs the Expo server and prints the QR
+code; see [development](../docs/development.md#phone-app-in-the-dev-stack). To run it by
+hand instead:
+
 ```bash
 cd mobile
 npm ci

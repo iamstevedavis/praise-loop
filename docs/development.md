@@ -37,6 +37,30 @@ source, so new migration files apply on the next `up`.
 - **`Permission denied` on `.next/`, `public/` or `private-media/`**: files left
   root-owned by older containers; `sudo chown -R $USER:$USER .` once.
 
+## Phone app in the dev stack
+
+`docker compose -f docker-compose.yml -f docker-compose.dev.yml up` also starts a
+`mobile` service: the Expo dev server for the phone app in `mobile/`, so it comes up
+with the web app and worker. Watch its logs for a QR code and an `exp://<LAN address>:8081`
+URL. On a phone on the same Wi-Fi, install **Expo Go** (App Store or Google Play), scan the
+QR code (or enter the URL under "Enter URL manually"), then see the demo flow below to sign in.
+
+- It runs on the **host network** (Linux; Docker Desktop on macOS/Windows does not support
+  that) so it can detect the LAN address a phone reaches. Set `DEV_LAN_IP` in `.env` to
+  override the detected address (several networks, a VPN). The app is pointed at
+  `http://<LAN address>:3000` automatically.
+- Dependencies install into `mobile/node_modules` on first start and again whenever
+  `mobile/package-lock.json` changes. Source edits reload on the phone.
+- The service waits for the web container to be healthy. To skip it, add
+  `--scale mobile=0` to `up`.
+- Port 8081 must be free. If you start Expo by hand (`npm start` in `mobile/`) at the same
+  time, stop it first or set `MOBILE_PORT` in `.env` for one of them.
+- A firewall may block the phone from reaching ports 3000 and 8081. On Fedora with
+  firewalld, allow them for your network (for example `sudo firewall-cmd --add-port=8081/tcp
+  --add-port=3000/tcp`, which lasts until reboot).
+- Expo Go covers the demo flow. Native Google sign-in and push notifications need a
+  development build (#85, #89).
+
 ## Demo flow with synthetic data
 
 The phone flow can be walked end to end without Google OAuth, an OpenAI key or a

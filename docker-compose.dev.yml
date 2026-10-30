@@ -111,5 +111,29 @@ services:
       - .:/app:z
       - node_modules:/app/node_modules
 
+  # Expo dev server for the phone app (Expo Go). It runs on the host network so it can
+  # detect the LAN address a phone on the same Wi-Fi reaches (Linux only; set DEV_LAN_IP
+  # in .env to override, and scale it to 0 to skip it). Dependencies install into
+  # mobile/node_modules on first start, and again whenever mobile/package-lock.json changes.
+  mobile:
+    image: node:22-bookworm
+    network_mode: host
+    # A terminal makes Expo print its QR code in the `up` logs, as it does on the host.
+    tty: true
+    working_dir: /app/mobile
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - HOME=/tmp
+      - EXPO_NO_TELEMETRY=1
+      - DEV_LAN_IP=${DEV_LAN_IP:-}
+      - MOBILE_PORT=${MOBILE_PORT:-8081}
+    command: ["sh", "/app/mobile/dev-container.sh"]
+    volumes:
+      - .:/app:z
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   node_modules:
