@@ -62,6 +62,9 @@ export function createDraftImageLoader({ baseUrl = appConfig.apiBaseUrl, fs = na
     return fs.cacheFile(draftImageCacheName(imagePath));
   }
 
+  // Bumped whenever a session ends, so a download that started before it can tell it is stale.
+  let sessionEpoch = 0;
+
   async function load(token: string, imagePath: string): Promise<string> {
     const key = `${baseUrl}\n${imagePath}`;
     const pending = downloads.get(key);
@@ -77,12 +80,21 @@ export function createDraftImageLoader({ baseUrl = appConfig.apiBaseUrl, fs = na
       if (downloads.get(key) === pending) downloads.delete(key);
     }
 
-    const promise = (async () => {
+    const startedIn = sessionEpoch;
+    // Assigned right below; the closures that read it only run after an await.
+    let promise!: Promise<string>;
+    promise = (async () => {
       const file = await fs.download(
         absoluteMediaUrl(baseUrl, imagePath),
         cachedFile(imagePath),
         { authorization: `Bearer ${token}` }
       );
+      if (startedIn !== sessionEpoch) {
+        // The session ended while this was downloading. The owner's image must not land on disk after
+        // sign-out, so remove it, unless a newer attempt (a new session) is already using the same file.
+        if (!downloads.has(key) || downloads.get(key) === promise) removeFile(file);
+        throw new Error("The session ended while the image was downloading.");
+      }
       return file.uri;
     })().catch(error => {
       if (downloads.get(key) === promise) downloads.delete(key);
@@ -97,11 +109,15 @@ export function createDraftImageLoader({ baseUrl = appConfig.apiBaseUrl, fs = na
   // they must not outlive the session on a shared or handed-over phone. Best effort, never throws.
   function clear() {
     downloads.clear();
+    // Downloads already in flight finish after this; the epoch lets them notice and clean up after themselves.
+    sessionEpoch += 1;
     try {
-      for (const file of fs.listCached()) {
-        try { file.delete?.(); } catch { /* the OS evicts cache files anyway */ }
-      }
+      for (const file of fs.listCached()) removeFile(file);
     } catch { /* listing the cache failed; nothing more to do */ }
+  }
+
+  function removeFile(file: CachedImageFile) {
+    try { file.delete?.(); } catch { /* the OS evicts cache files anyway */ }
   }
 
   return { load, clear };
