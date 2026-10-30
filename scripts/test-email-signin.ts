@@ -146,6 +146,21 @@ async function main() {
     await client.query("UPDATE email_sign_in_codes SET expires_at=now()-interval '1 minute' WHERE email='expired@example.invalid'");
     assert.equal((await verify(web("/api/auth/email/verify", { email: "expired@example.invalid", code: expiredCode }))).status, 400);
 
+    // The email transport has its own hourly budget (five per recipient), which a request can hit before
+    // the request limiter does. A request whose message cannot be sent must not invalidate the code that
+    // was already delivered.
+    fresh();
+    for (let i = 0; i < 5; i++) {
+      resetEmailCodeThrottle();
+      assert.equal((await request(web("/api/auth/email/request", { email: "budget@example.invalid" }))).status, 200);
+    }
+    const deliveredCode = lastCode();
+    resetEmailCodeThrottle();
+    const sentBefore = emailOutbox().length;
+    assert.equal((await request(web("/api/auth/email/request", { email: "budget@example.invalid" }))).status, 200, "the same answer when nothing could be sent");
+    assert.equal(emailOutbox().length, sentBefore, "no sixth message went out");
+    assert.equal((await verify(web("/api/auth/email/verify", { email: "budget@example.invalid", code: deliveredCode }))).status, 200, "the delivered code still signs in");
+
     // Five wrong guesses kill the code, even if the right one follows.
     fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "guesses@example.invalid" }))).status, 200);
