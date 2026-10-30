@@ -110,8 +110,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const business = businesses.find(b => String(b.id) === selectedId) ?? null;
   useEffect(() => { if (business) writeStored(business.id); }, [business]);
 
-  // The landing page and onboarding wizard are full-screen flows without app navigation.
-  const bare = pathname === "/" || pathname.startsWith("/onboarding");
+  // The landing page, public plans and onboarding wizard are full-screen flows
+  // without app navigation; the plans page must stay readable when signed out.
+  const bare = pathname === "/" || pathname === "/plans" || pathname.startsWith("/onboarding");
   const value = { status, businesses, business, select, reload };
   if (bare) return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 
