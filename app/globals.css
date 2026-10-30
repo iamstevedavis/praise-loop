@@ -51,7 +51,7 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
   .pl-topbar .pl-switcher label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .pl-topbar .pl-select { max-width: 48vw; }
   .pl-main { padding: 20px 16px 96px; }
-  .pl-tabbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 6px 4px calc(10px + env(safe-area-inset-bottom)); background: var(--pl-surface); border-top: 1px solid var(--pl-line); }
+  .pl-tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 6px 4px calc(10px + env(safe-area-inset-bottom)); background: var(--pl-surface); border-top: 1px solid var(--pl-line); }
   .pl-tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 52px; color: var(--pl-muted); font-size: 12px; font-weight: 600; text-decoration: none; }
   .pl-tabbar a[aria-current="page"] { color: var(--pl-green); font-weight: 700; }
 }
