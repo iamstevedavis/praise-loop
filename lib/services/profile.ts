@@ -10,7 +10,8 @@ export type Profile = {
   name: string | null;
   email: string | null;
   nameSource: NameSource | null;
-  provider: "google";
+  // How the owner signs in (Google first when they have several), or null when no method is linked yet.
+  provider: string | null;
   initials: string;
 };
 
@@ -18,6 +19,7 @@ type ProfileRow = {
   name: string | null;
   email: string | null;
   name_source: NameSource;
+  provider: string | null;
 };
 
 // Two letters for an avatar: first and last word of the name, or the local part
@@ -36,15 +38,17 @@ function toProfile(row: ProfileRow): Profile {
     email: row.email,
     // No name means there is no source to report, whatever the column says.
     nameSource: name ? row.name_source : null,
-    // Google is the only owner provider today; demo sessions stand in for it.
-    provider: "google",
+    provider: row.provider,
     initials: initialsFor(name, row.email)
   };
 }
 
 export async function profileFor(ownerId: string): Promise<Profile> {
   const row = (await query<ProfileRow>(
-    "SELECT name, email, name_source FROM auth_users WHERE id=$1",
+    `SELECT u.name, u.email, u.name_source,
+            (SELECT a.provider FROM auth_accounts a WHERE a.owner_id=u.id
+             ORDER BY (a.provider='google') DESC, a.provider LIMIT 1) AS provider
+     FROM auth_users u WHERE u.id=$1`,
     [ownerId]
   )).rows[0];
   if (!row) throw new Error("Owner not found");

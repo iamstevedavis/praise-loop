@@ -312,7 +312,8 @@ profile screen (#151), so the two cannot disagree.
 
 - `GET /api/profile` returns `name` (null when Google supplied none and the owner
   has not set one), `email`, `nameSource` (`provider`, `owner`, or null without a
-  name), `provider` (`google`, the only owner provider) and `initials` for the
+  name), `provider` (the owner's linked sign-in method, Google first, or null
+  when none is linked) and `initials` for the
   avatar. It returns no
   provider tokens and no other internal ids; the owner comes from the session, so
   another owner's row is never reachable. The response is `Cache-Control: private,
