@@ -6,8 +6,7 @@ const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true,
 const usage = (overrides: Partial<WeeklyUsage> = {}): WeeklyUsage => ({
   businessId: 1, name: "Cafe", timezone: "America/Toronto", resetsOn: "2026-11-02", allocated: 0, target: 1, weeklyTarget: 3, quotaMet: false, ...overrides
 });
-const plan = (overrides: Partial<Entitlements> = {}): Entitlements => ({ plan: "free", source: "default", expiresAt: null, limits: free, usage: [usage()], ...overrides });
-const now = new Date("2026-10-29T12:00:00Z");
+const plan = (overrides: Partial<Entitlements> = {}): Entitlements => ({ plan: "free", source: "default", expiresAt: null, expired: false, limits: free, usage: [usage()], ...overrides });
 
 describe("plan summary", () => {
   it("finds the usage for the selected business only", () => {
@@ -32,14 +31,14 @@ describe("plan summary", () => {
   });
 
   it("explains an expired Pro plan as Free", () => {
-    const expired = plan({ expiresAt: "2026-01-01T00:00:00.000Z" });
-    expect(expiryNote(expired, now)).toBe("Your Pro plan expired on 2026-01-01, so you are on the Free plan.");
-    expect(expiryNote(plan({ plan: "pro", limits: pro, source: "manual", expiresAt: "2027-01-01T00:00:00.000Z" }), now)).toBe("Your Pro plan runs until 2027-01-01.");
-    expect(expiryNote(plan(), now)).toBeNull();
+    const expired = plan({ expiresAt: "2026-01-01T00:00:00.000Z", expired: true });
+    expect(expiryNote(expired)).toBe("Your Pro plan expired on 2026-01-01, so you are on the Free plan.");
+    expect(expiryNote(plan({ plan: "pro", limits: pro, source: "manual", expiresAt: "2027-01-01T00:00:00.000Z" }))).toBe("Your Pro plan runs until 2027-01-01.");
+    expect(expiryNote(plan())).toBeNull();
   });
 
   it("lists limits and this week's usage", () => {
-    const lines = planLines(plan({ plan: "pro", limits: pro }), usage({ allocated: 2, target: 5 }), now);
+    const lines = planLines(plan({ plan: "pro", limits: pro }), usage({ allocated: 2, target: 5 }));
     expect(lines[0]).toBe("Pro plan");
     expect(lines).toContain("2 of 5 posts this week, resets 2026-11-02 (America/Toronto)");
     expect(lines[2]).toContain("Watermark: no");

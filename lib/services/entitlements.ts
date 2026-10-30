@@ -19,6 +19,8 @@ export type Entitlements = {
   plan: Plan;
   source: PlanSource;
   expiresAt: string | null;
+  /** True when a stored Pro plan has lapsed and is being treated as Free. */
+  expired: boolean;
   limits: EntitlementLimits;
 };
 
@@ -42,6 +44,7 @@ export function entitlementsForPlan(plan: string, source: PlanSource, expiresAt:
     plan: effective,
     source,
     expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+    expired: plan === "pro" && effective === "free",
     limits: PLAN_LIMITS[effective]
   };
 }

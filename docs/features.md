@@ -240,7 +240,8 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
   limited by the plan), whether the quota is met, and when the week resets
   (`resetsOn` is the next Monday in the business's timezone, `resetsAt` that
   instant). Usage reads `generation_periods` and `generationWeek`, so it never
-  disagrees with what the generator enforces. No route lets an owner change
+  disagrees with what the generator enforces. `expired` is true when a stored
+  Pro plan has lapsed and is read as Free. No route lets an owner change
   their own plan.
 
 ### Plan page and limit messages (#133)

@@ -7,7 +7,7 @@ import sharp from "sharp";
 import { databaseFixture } from "./db-fixture";
 import { sessionHash } from "../lib/auth-adapter";
 import { PLAN_LIMITS, entitlementsFor, entitlementsForPlan, setOwnerPlan } from "../lib/services/entitlements";
-import { expiryNote, quotaMetMessage } from "../lib/planDisplay";
+import { expiryNote, formatLocalDate, quotaMetMessage, weekLimitNotice } from "../lib/planDisplay";
 import { entitlementsWithUsage, localMidnight, weeklyUsage } from "../lib/services/planUsage";
 import { processGeneration, requestGeneration, type GenerationDeps } from "../lib/services/generation";
 import { renderDraftImage } from "../lib/services/imageRenderer";
@@ -19,7 +19,7 @@ async function main() {
 
   try {
     // Pure plan resolution: default free, configured pro, and expired pro.
-    assert.deepEqual(entitlementsForPlan("free", "default", null), { plan: "free", source: "default", expiresAt: null, limits: PLAN_LIMITS.free });
+    assert.deepEqual(entitlementsForPlan("free", "default", null), { plan: "free", source: "default", expiresAt: null, expired: false, limits: PLAN_LIMITS.free });
     assert.equal(entitlementsForPlan("pro", "manual", null).limits.postsPerWeek, 5);
     const expiredPlan = entitlementsForPlan("pro", "manual", "2020-01-01T00:00:00Z", new Date("2026-01-01T00:00:00Z"));
     assert.equal(expiredPlan.plan, "free");
@@ -142,7 +142,7 @@ async function main() {
       assert.equal(usageOf(metBody).allocated, 1);
       assert.equal(usageOf(metBody).quotaMet, true);
       assert.match(quotaMetMessage(metBody, usageOf(metBody))!, /Free plan includes 1 post a week/);
-      assert.equal(expiryNote(metBody, now), null);
+      assert.equal(expiryNote(metBody), null);
 
       // Pro with the full quota used: the target is the owner's own, so the message names the Pro allowance.
       const proUsage = (await entitlementsWithUsage("pro-owner", now)).usage[0];
@@ -165,8 +165,20 @@ async function main() {
       assert.equal(expiredView.plan, "free");
       assert.equal(expiredView.usage[0].target, 1);
       assert.equal(expiredView.usage[0].allocated, 0);
-      assert.equal(expiryNote(expiredView, now), "Your Pro plan expired on 2020-01-01, so you are on the Free plan.");
-      assert.equal(expiryNote(await entitlementsWithUsage("pro-owner", now), now), null, "an open-ended Pro plan has no expiry note");
+      assert.equal(expiryNote(expiredView), "Your Pro plan expired on 2020-01-01, so you are on the Free plan.");
+      assert.equal(expiryNote(await entitlementsWithUsage("pro-owner", now)), null, "an open-ended Pro plan has no expiry note");
+
+      // The This Week notice depends only on usage, not on which posts are still listed, so a
+      // Free owner who skipped their one allocated post still sees the plan limit and reset day.
+      assert.equal(
+        weekLimitNotice(metBody, usageOf(metBody)),
+        `${quotaMetMessage(metBody, usageOf(metBody))} New posts start ${formatLocalDate(usageOf(metBody).resetsOn)}.`
+      );
+      assert.equal(weekLimitNotice(body, { ...usageOf(body), quotaMet: false }), null, "no notice while there is room");
+      assert.match(weekLimitNotice(expiredView, { ...expiredView.usage[0], allocated: 1, quotaMet: true })!, /Free plan includes 1 post.*Your Pro plan expired on 2020-01-01/);
+      assert.equal(expiredView.expired, true);
+      assert.equal(proPlan.expired, false);
+      assert.equal(entitlementsForPlan("free", "default", "2020-01-01T00:00:00Z").expired, false, "a Free plan with a past date is not expired Pro");
 
       const businessesRoute = require("../app/api/businesses/route");
       const retried = await businessesRoute.POST(request("/api/businesses", "POST", { name: "Retried synthetic", timezone: "UTC", onboardingKey }));

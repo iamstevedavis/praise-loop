@@ -28,10 +28,11 @@ const planNames: Record<string, string> = { free: "Free", pro: "Pro" };
 export const planName = (plan: string) => planNames[plan] ?? plan;
 
 /** A stored Pro plan whose expiry has passed reads as Free; this explains why. */
-export function expiryNote(e: Pick<Entitlements, "plan" | "expiresAt">, now = new Date()): string | null {
+export function expiryNote(e: Pick<Entitlements, "plan" | "expiresAt" | "expired">): string | null {
   if (!e.expiresAt) return null;
   const date = e.expiresAt.slice(0, 10);
-  if (e.plan === "free") return new Date(e.expiresAt).getTime() <= now.getTime() ? `Your Pro plan expired on ${date}, so you are on the Free plan.` : null;
+  if (e.expired) return `Your Pro plan expired on ${date}, so you are on the Free plan.`;
+  if (e.plan === "free") return null;
   return `Your ${planName(e.plan)} plan runs until ${date}.`;
 }
 
@@ -45,6 +46,14 @@ export function quotaMetMessage(e: Pick<Entitlements, "plan" | "limits">, usage:
   return usage.weeklyTarget > cap
     ? `You’ve reached this week’s limit: the ${plan} plan includes ${posts(cap)} a week for each business.`
     : `You’ve made all ${posts(usage.target)} you asked for this week. The ${plan} plan allows up to ${cap} a week.`;
+}
+
+/** The full This Week notice for a used-up quota: the limit, when posts resume, and any expiry note. */
+export function weekLimitNotice(e: Pick<Entitlements, "plan" | "limits" | "expiresAt" | "expired">, usage: WeeklyUsage | undefined): string | null {
+  const message = usage ? quotaMetMessage(e, usage) : null;
+  if (!usage || !message) return null;
+  const expiry = expiryNote(e);
+  return `${message} New posts start ${formatLocalDate(usage.resetsOn)}.${expiry ? ` ${expiry}` : ""}`;
 }
 
 /** "Monday, Nov 2" for a business-local YYYY-MM-DD date, independent of the viewer's timezone. */
