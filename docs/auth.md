@@ -109,6 +109,19 @@ instead of the default Pro one. The demo owner has the same ownership checks, ve
 audit events as a real owner, so the flow is realistic; never enable the flag on a
 shared server. Production sign-in remains the Google exchange above.
 
+Profile (#149): `GET /api/profile` returns the signed-in owner's `name` (nullable),
+`email`, `nameSource` (`provider`, `owner`, or null when there is no name), `provider`
+(always `google`: it is the only owner provider) and `initials` for an avatar. It
+never returns provider tokens and keeps `Cache-Control: private, no-store`.
+`PATCH /api/profile` accepts only `{ "name": "..." }`: trimmed, 1–80 characters, no
+control characters, and 400 otherwise. The email is read-only because it is the
+verified Google identity account linking depends on. Migration 016 adds
+`auth_users.name_source`; a name the owner sets is never overwritten by a later
+provider sign-in on the web or the phone, while an empty name may still be filled
+from Google. Both cookie and `Authorization: Bearer` sessions use the same guard,
+so a request only ever reads or writes the session's own owner. `scripts/test-profile.ts`
+covers provider, missing, edited and sign-in-after-edit names.
+
 When the session ends (#137): the server side above is unchanged; every protected route
 answers 401. The clients now act on it.
 

@@ -150,6 +150,9 @@ export async function runSeed(env: Record<string, string | undefined> = process.
 
   const owners = {} as Record<DevOwnerKey, string>;
   for (const key of Object.keys(DEV_OWNERS) as DevOwnerKey[]) owners[key] = await ensureDevOwner(key);
+  // Keep the Free demo owner nameless on every run, so the profile empty state
+  // (#149) stays visible even when a previous seed or demo edit filled it in.
+  await query("UPDATE auth_users SET name=$2, name_source='provider' WHERE id=$1", [owners.free, DEV_OWNERS.free.name]);
 
   const oldImages = await seededImagePaths();
   const ids = await transaction(async () => {

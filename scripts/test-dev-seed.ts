@@ -15,7 +15,7 @@ const DEV = { MOBILE_DEV_AUTH: "1", NODE_ENV: "development" };
 async function snapshot(client: PoolClient, media: string) {
   const rows = async (sql: string) => (await client.query(sql)).rows;
   return {
-    owners: await rows("SELECT id,email FROM auth_users ORDER BY id"),
+    owners: await rows("SELECT id,email,name FROM auth_users ORDER BY id"),
     plans: await rows("SELECT owner_id,plan,source FROM owner_plans ORDER BY owner_id"),
     planEvents: await rows("SELECT owner_id,plan,actor FROM owner_plan_events ORDER BY owner_id,id"),
     tokens: await rows("SELECT owner_id,token,platform FROM device_push_tokens ORDER BY token"),
@@ -81,6 +81,8 @@ async function main() {
       assert.equal((await entitlementsFor("dev-owner")).plan, "pro");
       assert.equal((await entitlementsFor("dev-owner-free")).plan, "free");
       assert.equal(one.owners.every(o => String(o.email).endsWith(".invalid")), true, "synthetic emails only");
+      assert.equal(one.owners.find(o => o.id === "dev-owner-free")!.name, null, "the Free demo owner has no name for the profile empty state");
+      assert.equal(one.owners.find(o => o.id === "dev-owner")!.name, "Demo Owner");
 
       // Reviews span ratings and dates; the Hespeler CSV came in through the same import.
       const ratings = new Set(one.reviews.map(r => r.rating));

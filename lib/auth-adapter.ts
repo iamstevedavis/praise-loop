@@ -8,7 +8,8 @@ export const authAdapter: Adapter = {
   getUser: id => user("SELECT * FROM auth_users WHERE id=$1", [id]),
   getUserByEmail: email => user("SELECT * FROM auth_users WHERE email=$1", [email]),
   getUserByAccount: a => user("SELECT u.* FROM auth_users u JOIN auth_accounts a ON a.owner_id=u.id WHERE a.provider=$1 AND a.provider_account_id=$2", [a.provider, a.providerAccountId]),
-  updateUser: async u => (await user('UPDATE auth_users SET name=coalesce($2,name),email=coalesce($3,email),"emailVerified"=coalesce($4,"emailVerified") WHERE id=$1 RETURNING *', [u.id,u.name,u.email,u.emailVerified]))!,
+  // A name the owner set (#149) outranks the provider's; a missing one is still filled at sign-in.
+  updateUser: async u => (await user(`UPDATE auth_users SET name=CASE WHEN name_source='owner' THEN name ELSE coalesce($2,name) END,email=coalesce($3,email),"emailVerified"=coalesce($4,"emailVerified") WHERE id=$1 RETURNING *`, [u.id,u.name,u.email,u.emailVerified]))!,
   deleteUser: async id => { await query("DELETE FROM auth_users WHERE id=$1", [id]); },
   // Authentication requires only provider identity. Provider access/refresh tokens are discarded.
   linkAccount: async (a: AdapterAccount) => { await query("INSERT INTO auth_accounts VALUES($1,$2,$3)", [a.provider,a.providerAccountId,a.userId]); },
