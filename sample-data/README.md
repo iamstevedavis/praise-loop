@@ -9,6 +9,11 @@ templates for the pilot, and the inputs the dev seeder and tests read.
 - `pilot/` holds the synthetic pilot ledger used as a template in
   [docs/pilot.md](../docs/pilot.md) and read by `scripts/test-pilot.ts`.
 
+`npm run dev:seed` loads every file in `csv/` that it lists in
+`scripts/seed/fixtures.ts` through the real CSV import, so the drafts it creates
+quote these reviews. If you change a review there, check the seeded drafts that
+quote it. See [docs/development.md](../docs/development.md#demo-flow-with-synthetic-data).
+
 **Everything here is invented.** The reviews and reviewer names are fictional and
 only exist to exercise the app. Never publish a post made from sample reviews,
 and never mix real customer reviews into these files. Real reviews belong in the
@@ -27,6 +32,8 @@ recognised as duplicates instead of adding rows. Limits: 1 MB, 1000 rows; see
 | File | What it is |
 |---|---|
 | `csv/hespeler-powder-coating.csv` | Hespeler Powder Coating, Cambridge, ON: sandblasting, powder coating and machine shop (24 reviews, ratings 2-5) |
+| `csv/copper-kettle-cafe.csv` | Copper Kettle Café, an invented neighbourhood café (21 reviews, ratings 1-5, `sample-cafe-NNN`) |
+| `csv/harbour-bike-repair.csv` | Harbour Bike Repair, an invented bike shop (17 reviews, ratings 2-5, `sample-bike-NNN`) |
 | `pilot/pilot-synthetic.json` | Example pilot ledger entries for synthetic businesses |
 
 The "download a sample" file in the app's onboarding is separate on purpose:
