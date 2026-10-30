@@ -83,6 +83,12 @@ stages are reused after failures/restarts; a crash after a provider accepted a c
 but before local persistence can require another call. Attempts and per-owner daily
 counters bound that exposure; exactly-once paid calls are not promised.
 
+Captions are limited to 200 characters. The prompt asks for 180 or less. A caption
+that still comes back too long gets one extra provider call asking for a shorter
+rewrite of just those captions. If that fails or is still too long, it ends on the
+last full sentence (or whole word) that fits, never mid-word or mid-hashtag and
+without a trailing "...". At most five hashtags are kept.
+
 `GET /api/generation?businessId=...` exposes only owner-authorized state. Existing
 quote selection POST now queues generation (202), never a second synchronous AI
 pipeline. `POST /api/generation/retry` takes draftPostId, only retries an exhausted
