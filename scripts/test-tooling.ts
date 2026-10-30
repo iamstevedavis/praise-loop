@@ -65,4 +65,19 @@ assert.ok(!existsSync(join(root, "middleware.ts")), "middleware.ts is the deprec
 const proxyModule = require("../proxy") as { proxy: () => Response; config: { matcher: string[] } };
 assert.deepEqual(proxyModule.config.matcher, ["/generated/:path*"], "the proxy must only match legacy generated paths");
 assert.equal(proxyModule.proxy().status, 404, "legacy public/generated files must never be served");
+// The dev stack starts the Expo server for the phone app (docker-compose.dev.yml `mobile` service). It needs the
+// host network to detect the LAN address, a terminal so Expo prints its QR code, and no CI mode (which disables
+// reloads); the entrypoint must exist and wire the packager hostname and API URL from that address.
+const devCompose = read("docker-compose.dev.yml");
+const mobileService = devCompose.slice(devCompose.indexOf("\n  mobile:\n"));
+assert.ok(mobileService.length > 20, "docker-compose.dev.yml must define a mobile service");
+assert.match(mobileService, /network_mode: host/, "mobile must use the host network to find the LAN address");
+assert.match(mobileService, /tty: true/, "mobile needs a terminal so Expo prints its QR code");
+assert.doesNotMatch(mobileService, /CI=/, "CI mode disables reloads in the Expo dev server");
+assert.match(mobileService, /\.:\/app:z/, "mobile must mount the source with the SELinux relabel");
+const mobileEntry = read("mobile/dev-container.sh");
+assert.match(mobileEntry, /REACT_NATIVE_PACKAGER_HOSTNAME/, "the packager hostname must be the LAN address");
+assert.match(mobileEntry, /EXPO_PUBLIC_API_BASE_URL/, "the app must be pointed at the LAN address");
+assert.match(mobileEntry, /^set -eu$/m, "the entrypoint must fail fast");
+assert.match(read("mobile/tsconfig.json"), /\.expo\/types/, "Expo adds this include on start; keep it committed so it does not rewrite the file");
 console.log("tooling regression tests passed");
