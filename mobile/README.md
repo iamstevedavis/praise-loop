@@ -55,7 +55,9 @@ Then tap **Sign in as demo owner**. The seed creates two businesses and five
 rendered drafts; see [development](../docs/development.md#demo-flow-with-synthetic-data).
 The token lives in the platform keychain (`expo-secure-store`); the share sheet
 receives a cached PNG and the caption is copied to the clipboard for pasting into
-Instagram. `shared` is owner-reported, never inferred.
+Instagram. `shared` is owner-reported, never inferred. Queue thumbnails and the
+draft image use the same authenticated download into the app cache, because the
+core React Native `Image` does not reliably send custom headers in Expo Go.
 
 ## Checks
 
@@ -67,9 +69,10 @@ npm test
 
 CI runs the same commands in the `mobile` job. Tests cover the API client's error
 mapping (401/409/429/network/timeout), the version gate, the keychain session store,
-draft/version API shapes, queue list states and generation progress, and every
-share-flow branch (unavailable share sheet, download/copy/share failures, cancelled
-share, version conflict, expired session).
+draft/version API shapes, queue list states and generation progress, the draft
+image cache (bearer header, shared downloads, retry, eviction and the 401 path),
+and every share-flow branch (unavailable share sheet, download/copy/share
+failures, cancelled share, version conflict, expired session).
 
 ## Builds
 

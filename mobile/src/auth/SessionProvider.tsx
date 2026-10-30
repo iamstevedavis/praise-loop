@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { isSignedOut } from "../api/client";
+import { draftImageLoader } from "../media/draftImage";
 import { sessionStore } from "./store";
 import { signInDemo as requestDemoSession, signOut as revokeSession } from "./session";
 
@@ -55,6 +56,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await revokeSession();
+    // Draft images are owner-private; do not let a later session reuse them.
+    draftImageLoader.clear();
     setToken(null);
     setSessionEnded(false);
     setStatus("signedOut");
@@ -62,6 +65,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const expire = useCallback(() => {
     void sessionStore.clear();
+    draftImageLoader.clear();
     setToken(null);
     setSessionEnded(true);
     setStatus("signedOut");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,10 +8,10 @@ import { api } from "../../api";
 import { ApiError } from "../../api/client";
 import { captionProblem, listDrafts, regenerateDraft, saveCaption, setDraftStatus, type Draft } from "../../api/drafts";
 import { useSession } from "../../auth/SessionProvider";
-import { appConfig } from "../../config";
-import { discardDraftImage, downloadDraftImage, absoluteMediaUrl } from "../../posting/media";
+import { discardDraftImage, downloadDraftImage } from "../../posting/media";
 import { confirmShared, declineShared, PASTE_HINT, prepareShare, SHARED_HINT, type ShareDeps, type ShareState } from "../../posting/shareFlow";
 import { Banner, Button, Chip } from "../../ui/components";
+import { DraftImage } from "../../ui/DraftImage";
 import { colors } from "../../ui/theme";
 
 function message(error: unknown, fallback: string): string {
@@ -295,11 +295,11 @@ export default function DraftScreen() {
 
         {notice ? <Banner message={notice.message} tone={notice.tone} /> : null}
 
-        {draft.image_path && token ? (
-          <Image
-            source={{ uri: absoluteMediaUrl(appConfig.apiBaseUrl, draft.image_path), headers: { authorization: `Bearer ${token}` } }}
+        {draft.image_path ? (
+          <DraftImage
+            imagePath={draft.image_path}
             style={styles.image}
-            accessibilityIgnoresInvertColors
+            label={`Post image quoting ${draft.author_name ?? "a reviewer"}`}
           />
         ) : null}
 

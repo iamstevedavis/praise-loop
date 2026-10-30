@@ -129,6 +129,15 @@ answers 404 for the demo sign-in even if the flag is set.
    and send the returned token as `Authorization: Bearer <token>` to the API.
    The same flag and production guard apply as for the Pro owner.
 
+Queue thumbnails and the draft screen's image are fetched like the share flow:
+the app downloads the owner-protected PNG with `expo-file-system` and the bearer
+token into its cache, then renders the local file. React Native's core `Image`
+does not reliably send custom headers in Expo Go, so do not switch these back to
+`source={{ uri, headers }}`. A failed download shows a tappable retry
+placeholder; a 401 returns the app to sign-in. With the phone on the demo owner,
+the web log should show `200` for its `/api/media/draft-…png` requests. The seed
+is unchanged: its `image_path` values already point at the rendered files.
+
 The demo owner is an ordinary `auth_users` row, so ownership checks, version
 conflicts and audit events behave exactly as they do for a real owner. Never set
 `MOBILE_DEV_AUTH` on a shared or production server.

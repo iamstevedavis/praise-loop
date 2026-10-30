@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useFocusEffect } from "expo-router";
 import { api } from "../api";
@@ -7,12 +7,11 @@ import { ApiError } from "../api/client";
 import { listBusinesses, type Business } from "../api/businesses";
 import { fetchGeneration, listDrafts, type Draft, type GenerationSnapshot } from "../api/drafts";
 import { fetchEntitlements, type Entitlements } from "../api/entitlements";
-import { absoluteMediaUrl } from "../posting/media";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
 import { expiryNote, planLines, quotaMetMessage, usageFor } from "../queue/planSummary";
 import { useSession } from "../auth/SessionProvider";
-import { appConfig } from "../config";
 import { Banner, Chip, Section } from "../ui/components";
+import { DraftImage } from "../ui/DraftImage";
 import { colors } from "../ui/theme";
 
 function statusChip(draft: Draft) {
@@ -23,7 +22,7 @@ function statusChip(draft: Draft) {
   return <Chip label={draft.status} />;
 }
 
-function DraftRow({ draft, businessId, token }: { draft: Draft; businessId: number; token: string | null }) {
+function DraftRow({ draft, businessId }: { draft: Draft; businessId: number }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -31,11 +30,11 @@ function DraftRow({ draft, businessId, token }: { draft: Draft; businessId: numb
       onPress={() => router.push({ pathname: "/draft/[id]", params: { id: String(draft.id), businessId: String(businessId) } })}
       style={styles.card}
     >
-      {draft.image_path && token ? (
-        <Image
-          source={{ uri: absoluteMediaUrl(appConfig.apiBaseUrl, draft.image_path), headers: { authorization: `Bearer ${token}` } }}
+      {draft.image_path ? (
+        <DraftImage
+          imagePath={draft.image_path}
           style={styles.thumb}
-          accessibilityIgnoresInvertColors
+          label={`Post image quoting ${draft.author_name ?? "a reviewer"}`}
         />
       ) : (
         <View style={[styles.thumb, styles.thumbEmpty]}><Text style={styles.thumbEmptyText}>No image</Text></View>
@@ -51,7 +50,7 @@ function DraftRow({ draft, businessId, token }: { draft: Draft; businessId: numb
 }
 
 export default function QueueScreen() {
-  const { status, token, signOut, handleError } = useSession();
+  const { status, signOut, handleError } = useSession();
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
   const [businessId, setBusinessId] = useState<number | null>(null);
   // Keyed by business: a switch must never show the previous business's drafts
@@ -221,7 +220,7 @@ export default function QueueScreen() {
 
             {view.awaiting.length > 0 ? (
               <Section title="Ready to review">
-                {view.awaiting.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+                {view.awaiting.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} />)}
               </Section>
             ) : null}
 
@@ -235,25 +234,25 @@ export default function QueueScreen() {
 
             {view.failed.length > 0 ? (
               <Section title="Needs attention" hint="Open a post to retry it from the web for now.">
-                {view.failed.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+                {view.failed.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} />)}
               </Section>
             ) : null}
 
             {view.approved.length > 0 ? (
               <Section title="Approved — ready to post" hint="Open a post, then tap Post to share it to Instagram or Facebook.">
-                {view.approved.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+                {view.approved.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} />)}
               </Section>
             ) : null}
 
             {view.scheduled.length > 0 ? (
               <Section title="Scheduled" hint="Scheduled on the web app. They are read-only here.">
-                {view.scheduled.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+                {view.scheduled.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} />)}
               </Section>
             ) : null}
 
             {view.shared.length > 0 ? (
               <Section title="Shared" hint="Owner-reported, so these are not claimed as verified publications.">
-                {view.shared.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} token={token} />)}
+                {view.shared.map(draft => <DraftRow key={draft.id} draft={draft} businessId={businessId ?? 0} />)}
               </Section>
             ) : null}
           </>
