@@ -67,20 +67,23 @@ export function createDraftImageLoader({ baseUrl = appConfig.apiBaseUrl, fs = na
 
   async function load(token: string, imagePath: string): Promise<string> {
     const key = `${baseUrl}\n${imagePath}`;
+    // Taken before any await: a caller that began in an earlier session must never retry, or
+    // adopt a file, in a later one.
+    const startedIn = sessionEpoch;
     const pending = downloads.get(key);
     if (pending) {
       try {
         const uri = await pending;
         // The OS may evict a cache file between screens; redownload instead of
         // handing React Native a URI that no longer exists.
-        if (cachedFile(imagePath).exists) return uri;
+        if (startedIn === sessionEpoch && cachedFile(imagePath).exists) return uri;
       } catch {
         // The failed promise is removed below; fall through to a fresh attempt.
       }
+      if (startedIn !== sessionEpoch) throw new Error("The session ended while the image was downloading.");
       if (downloads.get(key) === pending) downloads.delete(key);
     }
 
-    const startedIn = sessionEpoch;
     // Assigned right below; the closures that read it only run after an await.
     let promise!: Promise<string>;
     promise = (async () => {
