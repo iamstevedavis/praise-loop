@@ -20,7 +20,11 @@ async function main() {
     for (const [id, email] of [["push-a", "a@example.invalid"], ["push-b", "b@example.invalid"]]) await client.query("INSERT INTO auth_users(id,email) VALUES($1,$2)", [id, email]);
     const biz = async (owner: string, name: string) => (await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES($1,'UTC',$2) RETURNING id", [name, owner])).rows[0].id;
     const ba = await biz("push-a", "Synthetic A"), bb = await biz("push-b", "Synthetic B");
-    const week = "2026-10-26";
+    // The fixture uses the real clock: deliveries are inserted with the database's
+    // `now()`, so pin the tick slightly ahead of it and derive the current UTC week.
+    const now = new Date(Date.now() + 1000);
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)));
+    const week = monday.toISOString().slice(0, 10);
     const period = async (b: number, n: number, jobState = "complete") => {
       await client.query("INSERT INTO generation_periods(business_id,period_start,timezone,target,allocated,completed) VALUES($1,$2,'UTC',$3,$3,$3)", [b, week, n]);
       for (let i = 0; i < n; i++) {
@@ -29,7 +33,6 @@ async function main() {
       }
     };
     await period(ba, 3); await period(bb, 2, "running");
-    const now = new Date("2026-10-30T12:00:00Z");
 
     // Token endpoints: validation, ownership, refresh.
     const sa = (await createMobileSession("push-a")).token, sb = (await createMobileSession("push-b")).token;
