@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-10-30
+  Decision: Show initials instead of Google's profile picture on owner avatars (#149)
+  Why: The profile API needs a stable fallback while Google does not always supply a name, and an avatar is not worth another network dependency or privacy surface now. Initials come from the name (or the email's local part) on the server, so both clients render the same thing without fetching anything. If a picture is added later, store it locally rather than hotlinking Google's URL, which can expire and leaks the owner's browsing to the image host.
+
 - Date: 2026-10-28
   Decision: Allow OpenRouter as the caption provider, with the model supplied only by `OPENROUTER_MODEL`
   Why: The pilot has no OpenAI or Anthropic key and wants to start on OpenRouter's free models. It speaks the OpenAI chat-completions shape, so it is a second branch inside the existing `fetch` caller with no new dependency. The model is a required setting with no default because free model ids change and a guessed id would fail in production; without it nothing is sent. OpenAI keeps priority when both keys are set, so existing deployments are unchanged. Free models are rate limited and may log prompts (reviewer quotes), so use real customer reviews only after checking the chosen model's data policy.
