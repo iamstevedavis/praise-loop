@@ -1,4 +1,5 @@
-import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { signInWithIdentity } from "./authLinking";
 import { query, transaction } from "./db";
 import { EmailError, getEmailTransport, oneTimeCodeEmail, sendEmail } from "./email";
 
@@ -136,41 +137,14 @@ export async function verifyEmailCode(email: string, code: string, now = Date.no
   });
 }
 
-// The linking policy (#156): a code proves control of the address, so an owner
-// already known by that address keeps one owner and gains an email method. A
-// different address never attaches to an existing owner. Concurrent first
-// sign-ins are serialized by the auth_users email lock and the account key.
-export async function findOrCreateEmailOwner(email: string): Promise<string> {
-  const existing = (await query<{ owner_id: string }>(
-    "SELECT owner_id FROM auth_accounts WHERE provider='email' AND provider_account_id=$1",
-    [email]
-  )).rows[0];
-  if (existing) return existing.owner_id;
-
-  return transaction(async () => {
-    const known = (await query<{ id: string }>(
-      "SELECT id FROM auth_users WHERE lower(email)=$1 FOR UPDATE",
-      [email]
-    )).rows[0];
-    const ownerId = known
-      ? (await query<{ id: string }>(
-        `UPDATE auth_users SET "emailVerified"=coalesce("emailVerified",now()) WHERE id=$1 RETURNING id`,
-        [known.id]
-      )).rows[0].id
-      : (await query<{ id: string }>(
-        `INSERT INTO auth_users(id,name,email,"emailVerified") VALUES($1,NULL,$2,now())
-         ON CONFLICT(email) DO UPDATE SET "emailVerified"=coalesce(auth_users."emailVerified",now())
-         RETURNING id`,
-        [randomUUID(), email]
-      )).rows[0].id;
-    await query(
-      "INSERT INTO auth_accounts(provider,provider_account_id,owner_id) VALUES('email',$1,$2) ON CONFLICT DO NOTHING",
-      [email, ownerId]
-    );
-    // A concurrent sign-in may have linked this address first; the account row wins.
-    return (await query<{ owner_id: string }>(
-      "SELECT owner_id FROM auth_accounts WHERE provider='email' AND provider_account_id=$1",
-      [email]
-    )).rows[0].owner_id;
-  });
+// The linking policy (#156) lives in lib/authLinking.ts and is shared with Google: a code proves
+// control of the address, so an owner already known by that address keeps one owner and gains an
+// email method (with its added and last-used times), and concurrent first sign-ins are serialized
+// there. Returns null when the policy refuses the sign-in.
+export async function findOrCreateEmailOwner(email: string): Promise<string | null> {
+  const result = await signInWithIdentity({ provider: "email", subject: email, email, emailVerified: true });
+  if (!result.ok) return null;
+  // The code proved control of the mailbox, so the address now counts as verified.
+  await query(`UPDATE auth_users SET "emailVerified"=coalesce("emailVerified",now()) WHERE id=$1`, [result.ownerId]);
+  return result.ownerId;
 }

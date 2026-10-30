@@ -106,6 +106,9 @@ async function main() {
     const account = (await client.query("SELECT * FROM auth_accounts WHERE owner_id=$1", [session.owner_id])).rows[0];
     assert.equal(account.provider, "email");
     assert.equal(account.provider_account_id, "new@example.invalid");
+    // It goes through the shared linking policy (#156), so the method records when it was added and used.
+    assert.equal(account.email, "new@example.invalid");
+    assert.ok(account.created_at && account.last_used_at, "the email method has its added and last-used times");
 
     // A code is single use.
     assert.equal((await verify(web("/api/auth/email/verify", { email: "new@example.invalid", code }))).status, 400);
