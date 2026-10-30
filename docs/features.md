@@ -259,10 +259,10 @@ decided after the pilot; see `docs/mobile-plan.md`).
   distinguishes a plan-capped target from a quota the owner set themselves.
 - **Brand settings** shows the plan's weekly allowance beside "Posts per week",
   and says how many will be made when the target is higher.
-- **Phone app**: the queue screen shows the same limit message and a read-only
-  "Your plan" section from the same endpoint. Wording lives in
-  `lib/planDisplay.ts` (web) and `mobile/src/queue/planSummary.ts` (phone) and
-  both are covered by tests.
+- **Phone app**: the queue screen shows the same limit message; the plan details
+  themselves moved to the Profile screen (#151) and read the same endpoint.
+  Wording lives in `lib/planDisplay.ts` (web) and
+  `mobile/src/queue/planSummary.ts` (phone) and both are covered by tests.
 - Onboarding does not yet mention the limit; that is a follow-up.
 
 Expired Pro falls back to Free at read time without deleting the stored plan, so
@@ -330,3 +330,32 @@ profile screen (#151), so the two cannot disagree.
   sign-in-after-edit case and the read-only email.
 - Avatars show initials for now; keeping Google's profile picture is a later
   decision (see `docs/decisions.md`).
+
+### Phone profile screen (#151)
+
+The phone app reaches the profile from an initials avatar button in the queue
+header; it is a normal expo-router screen with its own back button, so opening a
+draft from the queue and coming back still works.
+
+- The avatar shows initials from the name, or from the email's local part when
+  Google gave no name. The queue loads the profile best-effort on focus, so a name
+  edited on the profile screen shows up on the way back.
+- **Name** and **email**. A missing name shows **Add your name**, a saved one
+  shows **Edit name**; the email is read-only. A saved name appears immediately
+  and after relaunch. The name rule is checked on the phone before the request
+  (`mobile/src/profile/identity.ts`, mirroring `lib/services/profile.ts`) and the
+  server's own 400 message is shown if it still rejects it.
+- **Your plan**: the plan, its limits, this week's usage per business and the
+  expiry note, moved here from the bottom of the queue. The queue keeps only the
+  short "weekly limit reached" message that explains an empty week.
+- **This app**: the app version and the API server it is talking to, for support
+  and for the demo stack.
+- **Notifications**: a placeholder row; the toggle arrives with #89.
+- **Sign out**: revokes the session on the server, clears the stored token and
+  returns to sign-in.
+- Profile and plan requests are best-effort. A failure shows a retry on the
+  profile screen and never blocks the queue, while a 401 goes through the
+  session's `handleError` back to sign-in (see #137).
+- Covered by `mobile/__tests__/profile.test.ts` (initials, display name, the name
+  rule and the API wrapper's success, 400 and 401 cases) plus the client's
+  best-effort test. Manual checks on iOS and Android are recorded in the PR.

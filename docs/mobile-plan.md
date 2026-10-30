@@ -218,6 +218,7 @@ by theme; [Order of work](#order-of-work) says what has to wait for what.
 - #87 Post through the share sheet
 - #88 Device registration and "posts ready" notifications (server)
 - #89 Notification permission, registration and deep link (app)
+- #151 Profile screen: name, email, plan, app/server details and sign out
 
 ### Phase 3: pilot
 

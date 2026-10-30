@@ -3,16 +3,18 @@ import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleS
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useFocusEffect } from "expo-router";
 import { api } from "../api";
-import { ApiError } from "../api/client";
+import { ApiError, bestEffort } from "../api/client";
 import { listBusinesses, type Business } from "../api/businesses";
 import { fetchGeneration, listDrafts, type Draft, type GenerationSnapshot } from "../api/drafts";
 import { fetchEntitlements, type Entitlements } from "../api/entitlements";
+import { fetchProfile, type Profile } from "../api/profile";
 import { absoluteMediaUrl } from "../posting/media";
+import { initials } from "../profile/identity";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
-import { expiryNote, planLines, quotaMetMessage, usageFor } from "../queue/planSummary";
+import { expiryNote, quotaMetMessage, usageFor } from "../queue/planSummary";
 import { useSession } from "../auth/SessionProvider";
 import { appConfig } from "../config";
-import { Banner, Chip, Section } from "../ui/components";
+import { Avatar, Banner, Chip, Section } from "../ui/components";
 import { colors } from "../ui/theme";
 
 function statusChip(draft: Draft) {
@@ -51,7 +53,7 @@ function DraftRow({ draft, businessId, token }: { draft: Draft; businessId: numb
 }
 
 export default function QueueScreen() {
-  const { status, token, signOut, handleError } = useSession();
+  const { status, token, handleError } = useSession();
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
   const [businessId, setBusinessId] = useState<number | null>(null);
   // Keyed by business: a switch must never show the previous business's drafts
@@ -61,6 +63,9 @@ export default function QueueScreen() {
   const [offline, setOffline] = useState(false);
   // Best effort and read-only: a failed plan request must not hide the queue.
   const [plan, setPlan] = useState<Entitlements | null>(null);
+  // Only the avatar needs the profile here; the rest of it lives on the profile
+  // screen. Reloaded on focus so a name edited there shows up on the way back.
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // Refresh has no effect cleanup of its own, so it checks the selection again
   // after awaiting and drops a response for a business the owner left.
@@ -70,7 +75,28 @@ export default function QueueScreen() {
 
   // Fetchers stay pure so the effects below only set state after an await.
   const fetchBusinesses = useCallback(() => listBusinesses(api), []);
-  const fetchQueue = useCallback((id: number) => Promise.all([listDrafts(api, id), fetchGeneration(api, id), fetchEntitlements(api).catch(() => null)]), []);
+  const fetchQueue = useCallback((id: number) => Promise.all([
+    listDrafts(api, id),
+    fetchGeneration(api, id),
+    bestEffort(fetchEntitlements(api))
+  ]), []);
+
+  // The avatar is owner-wide, not per business, so it loads (and reloads on
+  // focus) even when the owner has no business yet.
+  useFocusEffect(useCallback(() => {
+    if (status !== "signedIn") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const loadedProfile = await bestEffort(fetchProfile(api));
+        if (!cancelled) setProfile(loadedProfile);
+      } catch (cause) {
+        if (cancelled) return;
+        handleError(cause);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [handleError, status]));
 
   const applyBusinesses = useCallback((list: Business[]) => {
     setBusinesses(list);
@@ -167,9 +193,11 @@ export default function QueueScreen() {
             <Text style={styles.eyebrow}>This week</Text>
             <Text style={styles.title}>{business?.name ?? "PraiseLoop"}</Text>
           </View>
-          <Pressable accessibilityRole="button" onPress={() => { void signOut(); }}>
-            <Text style={styles.link}>Sign out</Text>
-          </Pressable>
+          <Avatar
+            initials={initials(profile)}
+            accessibilityLabel="Open your profile"
+            onPress={() => router.push("/profile")}
+          />
         </View>
 
         {businesses && businesses.length > 1 ? (
@@ -258,12 +286,6 @@ export default function QueueScreen() {
             ) : null}
           </>
         ) : null}
-
-        {plan ? (
-          <Section title="Your plan" hint="Plans are changed on the web app.">
-            {planLines(plan, usage).map(line => <Text key={line} style={styles.caption}>{line}</Text>)}
-          </Section>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -276,7 +298,6 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, gap: 4 },
   eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1.4, textTransform: "uppercase", color: colors.muted },
   title: { fontSize: 28, lineHeight: 34, fontWeight: "700", color: colors.ink },
-  link: { fontSize: 14, fontWeight: "600", color: colors.accent, paddingVertical: 6 },
   picker: { gap: 8, paddingVertical: 4 },
   pickerItem: { borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 8, maxWidth: 220 },
   pickerItemSelected: { backgroundColor: colors.ink, borderColor: colors.ink },

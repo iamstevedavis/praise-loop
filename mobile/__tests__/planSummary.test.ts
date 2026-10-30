@@ -1,5 +1,5 @@
 import type { Entitlements, WeeklyUsage } from "../src/api/entitlements";
-import { expiryNote, planLines, quotaMetMessage, usageFor } from "../src/queue/planSummary";
+import { expiryNote, planLines, planUsageLines, quotaMetMessage, usageFor } from "../src/queue/planSummary";
 
 const free = { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, businesses: 1 };
 const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, businesses: 3 };
@@ -42,5 +42,20 @@ describe("plan summary", () => {
     expect(lines[0]).toBe("Pro plan");
     expect(lines).toContain("2 of 5 posts this week, resets 2026-11-02 (America/Toronto)");
     expect(lines[2]).toContain("Watermark: no");
+  });
+
+  it("names the business on each usage line for the profile screen", () => {
+    const two = plan({
+      limits: pro,
+      plan: "pro",
+      usage: [usage({ allocated: 2, target: 5 }), usage({ businessId: 2, name: "Bakery", target: 1 })]
+    });
+    expect(planUsageLines(two)).toEqual([
+      "Cafe: 2 of 5 posts this week, resets 2026-11-02 (America/Toronto)",
+      "Bakery: 0 of 1 post this week, resets 2026-11-02 (America/Toronto)"
+    ]);
+    expect(planUsageLines(null)).toEqual([]);
+    // The profile shows the plan lines without a selected business's usage.
+    expect(planLines(two, null).some(line => line.includes("this week"))).toBe(false);
   });
 });
