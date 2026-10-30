@@ -17,11 +17,16 @@ function countHashtags(text: string): number {
   return (text.match(/(^|\s)#\w+/g) ?? []).length;
 }
 
-function sanitizeCaption(text: string): string {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  const clipped = cleaned.length > 200 ? `${cleaned.slice(0, 197).trim()}...` : cleaned;
+const MAX_CAPTION = 200;
+// The prompt asks for less than the hard limit because models routinely overshoot a stated maximum.
+const TARGET_CAPTION = 180;
+const MIN_SENTENCE_CUT = 60;
 
-  const words = clipped.split(" ");
+// Collapses whitespace and keeps at most five hashtags. Never shortens the text itself.
+function normalizeCaption(text: string): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+
+  const words = cleaned.split(" ");
   let seenTags = 0;
   const limited = words.filter((w) => {
     if (w.startsWith("#")) {
@@ -32,6 +37,24 @@ function sanitizeCaption(text: string): string {
   });
 
   return limited.join(" ").trim();
+}
+
+// Last resort for a caption that is still too long after one shortening retry: end at the last full
+// sentence that fits, else at the last whole word. Never mid-word, never mid-hashtag, and no "...".
+export function fitCaption(text: string): string {
+  if (text.length <= MAX_CAPTION) return text;
+  const window = text.slice(0, MAX_CAPTION + 1);
+
+  let sentenceEnd = -1;
+  for (const m of window.matchAll(/[.!?](?=\s|$)/g)) {
+    if (m.index !== undefined && m.index < MAX_CAPTION) sentenceEnd = m.index + 1;
+  }
+  if (sentenceEnd >= MIN_SENTENCE_CUT) return window.slice(0, sentenceEnd).trim();
+
+  const lastSpace = window.charAt(MAX_CAPTION) === " " ? MAX_CAPTION : window.lastIndexOf(" ", MAX_CAPTION);
+  // A single unbroken run of 200+ characters has no word boundary to use.
+  const wholeWords = lastSpace > 0 ? window.slice(0, lastSpace) : window.slice(0, MAX_CAPTION);
+  return wholeWords.replace(/[\s,;:\-–—(]+$/, "").trim();
 }
 
 // The raw OpenAI Responses HTTP API does NOT return the SDK convenience
@@ -88,17 +111,28 @@ function extractCaptionJson(raw: string): Record<string, unknown> {
   throw new Error("Caption provider response did not contain valid JSON");
 }
 
-function parseCaptionStyles(raw: string): CaptionStyles {
+const STYLES = ["friendly", "premium", "playful"] as const;
+
+// Parses the provider's JSON into normalized captions that may still be over the limit.
+function parseCaptionDraft(raw: string): CaptionStyles {
   const parsed = extractCaptionJson(raw);
+  return {
+    friendly: normalizeCaption(String(parsed.friendly ?? "")),
+    premium: normalizeCaption(String(parsed.premium ?? "")),
+    playful: normalizeCaption(String(parsed.playful ?? ""))
+  };
+}
+
+function finalizeCaptions(draft: CaptionStyles): CaptionStyles {
   const variants = {
-    friendly: sanitizeCaption(String(parsed.friendly ?? "").trim()),
-    premium: sanitizeCaption(String(parsed.premium ?? "").trim()),
-    playful: sanitizeCaption(String(parsed.playful ?? "").trim())
+    friendly: fitCaption(draft.friendly),
+    premium: fitCaption(draft.premium),
+    playful: fitCaption(draft.playful)
   };
 
   for (const [style, text] of Object.entries(variants)) {
     if (!text) throw new Error(`Caption missing for style: ${style}`);
-    if (text.length > 200) throw new Error(`Caption too long for style: ${style}`);
+    if (text.length > MAX_CAPTION) throw new Error(`Caption too long for style: ${style}`);
     if (countHashtags(text) > 5) throw new Error(`Too many hashtags for style: ${style}`);
   }
 
@@ -114,7 +148,7 @@ Preferred brand tone: ${requestedTone}
 Return ONLY JSON with keys friendly, premium, playful.
 Rules:
 - include business name subtly (not spammy)
-- each caption <= 200 chars
+- each caption <= ${TARGET_CAPTION} characters (hard limit ${MAX_CAPTION}); finish every sentence, never trail off
 - max 5 hashtags per caption
 - no markdown, no extra keys
 - lean the ${requestedTone} caption closest to the preferred tone`;
@@ -183,20 +217,7 @@ function extractChatText(data: unknown): string {
   return text.trim();
 }
 
-export async function generateCaptionVariants(params: {
-  businessName: string;
-  quoteText: string;
-  brandTone?: BrandTone;
-}): Promise<CaptionStyles> {
-  const provider = chooseProvider();
-
-  const requestedTone = params.brandTone && BRAND_TONES.includes(params.brandTone)
-    ? params.brandTone
-    : "friendly";
-
-  const prompt = buildPrompt(params, requestedTone);
-  const timeout = timeoutMs();
-
+async function requestText(provider: Provider, prompt: string, timeout: number): Promise<string> {
   let res: Response;
   try {
     res = await fetch(provider.url, {
@@ -232,6 +253,47 @@ export async function generateCaptionVariants(params: {
     );
   }
 
-  const data = await res.json();
-  return parseCaptionStyles(provider.text(data));
+  return provider.text(await res.json());
+}
+
+function buildShortenPrompt(draft: CaptionStyles, tooLong: readonly (typeof STYLES)[number][]): string {
+  const subset = Object.fromEntries(tooLong.map((style) => [style, draft[style]]));
+  return `These social captions are too long. Rewrite each one to at most ${TARGET_CAPTION} characters, keeping its meaning, its tone and its hashtags (max 5). Do not cut it off mid-sentence.
+
+${JSON.stringify(subset)}
+
+Return ONLY JSON with exactly these keys: ${tooLong.join(", ")}. No markdown, no extra keys.`;
+}
+
+export async function generateCaptionVariants(params: {
+  businessName: string;
+  quoteText: string;
+  brandTone?: BrandTone;
+}): Promise<CaptionStyles> {
+  const provider = chooseProvider();
+
+  const requestedTone = params.brandTone && BRAND_TONES.includes(params.brandTone)
+    ? params.brandTone
+    : "friendly";
+
+  const timeout = timeoutMs();
+  let draft = parseCaptionDraft(await requestText(provider, buildPrompt(params, requestedTone), timeout));
+
+  // Models overshoot a stated length. Ask for one shortening of just the captions that are too long, rather
+  // than chopping them. A failed or unusable retry falls through to fitCaption, never to a hard failure.
+  const tooLong = STYLES.filter((style) => draft[style].length > MAX_CAPTION);
+  if (tooLong.length > 0) {
+    try {
+      const shorter = parseCaptionDraft(await requestText(provider, buildShortenPrompt(draft, tooLong), timeout));
+      const merged = { ...draft };
+      for (const style of tooLong) {
+        if (shorter[style]) merged[style] = shorter[style];
+      }
+      draft = merged;
+    } catch {
+      // keep the original captions; fitCaption below ends them on a sentence or word boundary
+    }
+  }
+
+  return finalizeCaptions(draft);
 }

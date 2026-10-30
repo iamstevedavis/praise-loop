@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateCaptionVariants } from "../lib/services/captions";
+import { fitCaption, generateCaptionVariants } from "../lib/services/captions";
 
 // Fixture coverage for raw OpenAI Responses API caption decoding (issue #41):
 // documented output shapes, multiple output items, empty/malformed content,
@@ -275,6 +275,78 @@ async function openRouterTest() {
   }
 }
 
+const SENTENCE = "Cafe Nova made our whole week with that warm welcome. ";
+const longCaption = (chars: number) => SENTENCE.repeat(Math.ceil(chars / SENTENCE.length)).slice(0, chars - 1).trim() + ".";
+
+function endsCleanly(text: string) {
+  assert.ok(text.length <= 200, `too long: ${text.length}`);
+  assert.doesNotMatch(text, /\.\.\.|…/, "no truncation ellipsis");
+  assert.match(text, /[.!?]$|#\w+$|\w$/, "ends on a whole word or sentence");
+}
+
+async function fitCaptionTest() {
+  assert.equal(fitCaption("Short and sweet."), "Short and sweet.");
+  const sentences = fitCaption(longCaption(260));
+  endsCleanly(sentences);
+  assert.match(sentences, /\.$/, "prefers ending on a full sentence");
+
+  // No sentence boundary after the minimum: cut on a whole word, never mid-word or mid-hashtag.
+  const words = fitCaption(("loving " + "#CafeNovaRegular ".repeat(30)).trim());
+  endsCleanly(words);
+  for (const word of words.split(" ")) assert.ok(word === "loving" || word === "#CafeNovaRegular", `partial word kept: ${word}`);
+
+  // One unbroken run has no boundary to use.
+  assert.equal(fitCaption("x".repeat(250)).length, 200);
+}
+
+async function overlongCaptionRetryTest() {
+  const ok = "Cafe Nova made our day. Thank you for the kind words!";
+  const prompts: string[] = [];
+  const respond = (second: () => Response) => {
+    let call = 0;
+    stubFetch(async (_url, init) => {
+      prompts.push(String((JSON.parse(String(init.body)) as { input: string }).input));
+      call += 1;
+      return call === 1
+        ? documentedResponse(JSON.stringify({ friendly: longCaption(230), premium: ok, playful: ok }))
+        : second();
+    });
+    return () => call;
+  };
+
+  // A caption within the limit needs one call and is untouched.
+  let calls = 0;
+  stubFetch(async () => { calls += 1; return documentedResponse(JSON.stringify(CAPTIONS)); });
+  assert.deepEqual(await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" }), CAPTIONS);
+  assert.equal(calls, 1);
+
+  // Over the limit: one retry for just that style, and its shorter rewrite is used verbatim.
+  const shorter = "Cafe Nova made our week. Thanks for the kind words #CafeNova";
+  let count = respond(() => documentedResponse(JSON.stringify({ friendly: shorter })));
+  const fixed = await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" });
+  assert.equal(count(), 2);
+  assert.equal(fixed.friendly, shorter);
+  assert.equal(fixed.premium, ok);
+  assert.match(prompts[1], /too long/);
+  assert.doesNotMatch(prompts[1], /Thank you for the kind words!/, "only the captions that are too long are resent");
+
+  // The retry is also over the limit: cut on a sentence boundary, no ellipsis, no further calls.
+  count = respond(() => documentedResponse(JSON.stringify({ friendly: longCaption(240) })));
+  const stillLong = await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" });
+  assert.equal(count(), 2);
+  endsCleanly(stillLong.friendly);
+
+  // The retry request fails or returns nothing usable: still a good caption, not a failed draft.
+  count = respond(() => { throw new Error("network down"); });
+  endsCleanly((await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" })).friendly);
+  assert.equal(count(), 2);
+  count = respond(() => documentedResponse("not json at all"));
+  endsCleanly((await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" })).friendly);
+
+  // The prompt asks for less than the hard limit.
+  assert.match(prompts[0], /<= 180 characters \(hard limit 200\)/);
+}
+
 async function main() {
   process.env.OPENAI_API_KEY = "sk-test-fixture";
 
@@ -290,6 +362,8 @@ async function main() {
     await missingApiKeyTest();
     await authorizationHeaderTest();
     await openRouterTest();
+    await fitCaptionTest();
+    await overlongCaptionRetryTest();
   } finally {
     restore();
   }
