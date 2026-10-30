@@ -1,15 +1,66 @@
 "use client";
 import { useBusiness } from "../AppShell";
+import { apiFetch } from "../apiFetch";
+import { signIn } from "next-auth/react";
+import { useCallback, useEffect, useState } from "react";
 import { expiryNote, formatLocalDate, planName, quotaMetMessage } from "../../lib/planDisplay";
 import { usePlan } from "../ui/usePlan";
 
 const sources = { default: "Default plan", manual: "Set by PraiseLoop support", store: "App store subscription" } as const;
 const yesNo = (value: boolean) => value ? "Included" : "Not included";
 
+type AuthMethod = { provider: string; email: string | null; addedAt: string | null; lastUsedAt: string | null };
+const providerNames: Record<string, string> = { google: "Google" };
+const methodName = (provider: string) => providerNames[provider] ?? provider;
+const methodAdded = (addedAt: string | null) => addedAt ? `Added ${addedAt.slice(0, 10)}` : "Added before we tracked method dates";
+
 // Read-only: plans are changed by operators or a verified store webhook, never here.
 export default function AccountPage() {
   const { status } = useBusiness();
   const { plan, failed } = usePlan();
+  const [methods, setMethods] = useState<AuthMethod[] | null>(null);
+  const [methodError, setMethodError] = useState<string | null>(null);
+  const [methodNotice, setMethodNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const loadMethods = useCallback(async () => {
+    try {
+      const response = await apiFetch("/api/account/methods");
+      if (!response.ok) { setMethodError("We couldn’t load your sign-in methods."); return; }
+      const data = await response.json() as { methods?: AuthMethod[] };
+      setMethods(data.methods ?? []);
+      setMethodError(null);
+    } catch {
+      setMethodError("We couldn’t load your sign-in methods.");
+    }
+  }, []);
+
+  useEffect(() => { void loadMethods(); }, [loadMethods]);
+  useEffect(() => {
+    const linked = new URLSearchParams(window.location.search).get("linked");
+    if (linked) setMethodNotice(`${methodName(linked)} linked.`);
+  }, []);
+
+  async function unlink(provider: string) {
+    setBusy(provider);
+    setMethodError(null);
+    setMethodNotice(null);
+    try {
+      const response = await apiFetch("/api/account/methods", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider })
+      });
+      const data = await response.json().catch(() => null) as { error?: string; methods?: AuthMethod[] } | null;
+      if (!response.ok) { setMethodError(data?.error ?? "We couldn’t unlink that method."); return; }
+      setMethods(data?.methods ?? []);
+      setMethodNotice(`${methodName(provider)} unlinked.`);
+    } catch {
+      setMethodError("We couldn’t unlink that method.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   if (status === "loading" || (!plan && !failed)) return <p className="pl-muted" role="status">Loading your plan…</p>;
   if (!plan) return <div className="pl-empty"><h2>We couldn’t load your plan</h2><p className="pl-muted">Check your connection and reload the page.</p></div>;
@@ -58,6 +109,37 @@ export default function AccountPage() {
             {quotaMetMessage(plan, u) ? <span className="pl-small">{quotaMetMessage(plan, u)}</span> : null}
           </div>
         )) : <p className="pl-muted">Add a business to see your weekly usage.</p>}
+      </section>
+
+      <section aria-labelledby="methods-h" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <h2 id="methods-h" className="pl-h2">Sign-in methods</h2>
+        <p className="pl-muted" style={{ margin: 0 }}>
+          These are the ways you can get into your account. Keep at least one so you can sign in again.
+        </p>
+        {methodNotice ? <p role="status" style={{ margin: 0, fontWeight: 600 }}>{methodNotice}</p> : null}
+        {methodError ? <p role="alert" className="pl-banner">{methodError} <button type="button" className="pl-link-button" onClick={() => void loadMethods()}>Try again</button></p> : null}
+        {methods === null && !methodError ? <p className="pl-muted" role="status">Loading your sign-in methods…</p> : null}
+        {methods?.length ? methods.map((method, index) => (
+          <div key={index} className="pl-panel" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <strong>{methodName(method.provider)}</strong>
+              <span className="pl-small pl-muted">{method.email ?? "No email on this method"}</span>
+              <span className="pl-small pl-muted">{methodAdded(method.addedAt)}</span>
+            </div>
+            <button
+              type="button"
+              className="pl-btn"
+              disabled={methods.length < 2 || busy === method.provider}
+              onClick={() => void unlink(method.provider)}
+            >
+              {busy === method.provider ? "Unlinking…" : "Unlink"}
+            </button>
+          </div>
+        )) : methods ? <p className="pl-muted">No sign-in method is linked yet.</p> : null}
+        {methods && !methods.some(method => method.provider === "google") ? (
+          <div><button type="button" className="pl-btn" onClick={() => void signIn("google", { callbackUrl: "/account?linked=google" })}>Link Google</button></div>
+        ) : null}
+        {methods?.length === 1 ? <p className="pl-small pl-muted" style={{ margin: 0 }}>You can’t unlink your only method. Add another method first.</p> : null}
       </section>
     </>
   );

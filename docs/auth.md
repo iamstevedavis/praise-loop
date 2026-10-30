@@ -92,6 +92,62 @@ Owner steps to create the app's OAuth clients (Google Cloud Console, Google Auth
    IDs. If the Android library requests the token for the web client ID, add that ID to
    `GOOGLE_ANDROID_CLIENT_ID`. Each variable accepts several comma-separated IDs.
 
+## Linking several sign-in methods to one owner (#156)
+
+One owner can have several methods in `auth_accounts`. Every sign-in path (web
+NextAuth callback and the mobile exchange) calls the same policy in
+`lib/authLinking.ts`:
+
+- **Identity is the provider plus its stable subject id**, never the email by
+  itself. A returning Google `sub` is the same owner even if Google now reports a
+  different address.
+- **Email can find an existing owner only when the provider guarantees the
+  claim is verified.** Google is trusted today; a future verified email code
+  joins that list. The address must match the owner row. An owner linked to a
+  different subject for the same provider is rejected, which is the #116/#117
+  reassigned-address rule.
+- **A provider whose email is not guaranteed verified never links by email.**
+  Microsoft's `email` claim is the current example: it creates a new owner with
+  no login email (the provider address is kept only on the method row), or is
+  linked from a signed-in session. Google sign-in with `email_verified` absent
+  is rejected rather than linked.
+- **A signed-in owner may attach a new method** because the session proves
+  control of the existing owner. The method must not already belong to another
+  owner, and one owner cannot have two subjects for the same provider. On the
+  web this happens when an owner on `/account` presses "Link Google": the
+  NextAuth callback sees the live session and links instead of switching
+  accounts. `POST /api/account/methods` does the same for the phone with a
+  verified Google ID token. Neither action requires the emails to match.
+- **Unlinking is refused for the last method.** `DELETE /api/account/methods`
+  with `{ "provider": "google" }` removes a method only while another remains,
+  so an owner cannot lock themselves out. `GET /api/account/methods` is the
+  owner-wide list the web and phone screens share; it returns the provider,
+  the method's email (a display snapshot), and when it was added and last used.
+  Existing rows have no historical timestamps and report `null`.
+- **Concurrency:** the email upsert locks the existing owner row and the
+  signed-in paths lock the owner row before attaching, so two subjects racing
+  for one address, or two link requests racing for one provider, leave exactly
+  one method. An owner row created by a losing request is removed if it has no
+  methods or other data.
+
+Migration 017 adds `auth_accounts.email`, `created_at` and `last_used_at`; it is
+additive and does not rewrite existing identities. Existing Google owners keep
+their `auth_users` row, email and data, and are only dated from the migration
+onward.
+
+### Account recovery
+
+The verified email on the owner is the recovery path: once the email one-time
+code lands (#157), an owner who loses their only method can prove control of
+that address and attach a new one. Until then there is no in-app recovery.
+There is deliberately **no support override in code**: an operator cannot
+impersonate an owner or attach a method through a hidden route. Merging two
+owners after an address was reassigned remains an operator task, not something
+the sign-in code does automatically.
+
+`scripts/test-auth-linking.ts` covers link, reject, unlink-last and the races;
+`scripts/test-mobile-google.ts` keeps the existing Google exchange behaviour.
+
 Push tokens (#88): `POST /api/mobile/push-tokens` (`{token, platform}`) registers or refreshes
 the signed-in owner's Expo push token and `DELETE` (`{token}`) removes it on sign-out; a
 token can only be removed by its owner. When a business's weekly generation period has

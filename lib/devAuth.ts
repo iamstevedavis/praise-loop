@@ -31,5 +31,12 @@ export async function ensureDevOwner(which: DevOwnerKey = "pro"): Promise<string
      ON CONFLICT(id) DO NOTHING`,
     [owner.id, owner.name, owner.email]
   );
+  // A demo owner is signed in without a real provider, but the profile's linked
+  // methods list should still show one so the unlink rules can be walked (#156).
+  await query(
+    `INSERT INTO auth_accounts(provider,provider_account_id,owner_id,email,created_at,last_used_at)
+     VALUES('google',$1,$2,$3,now(),now()) ON CONFLICT(provider,provider_account_id) DO NOTHING`,
+    [`dev-google-${owner.id}`, owner.id, owner.email]
+  );
   return owner.id;
 }
