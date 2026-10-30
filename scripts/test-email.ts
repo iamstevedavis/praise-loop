@@ -51,6 +51,9 @@ async function main() {
   setEnv({ NODE_ENV: "development", EMAIL_TRANSPORT: undefined, EMAIL_FROM: undefined, RESEND_API_KEY: undefined });
   assert.equal(getEmailTransport().name, "fake");
   assert.equal(getEmailTransport().from, DEV_EMAIL_FROM);
+  // Compose materializes unset variables as empty strings; blank is the default.
+  setEnv({ EMAIL_TRANSPORT: "" });
+  assert.equal(getEmailTransport().name, "fake");
 
   const outboxLogs: string[] = [];
   const fake = fakeEmailTransport({ logger: (line) => outboxLogs.push(line) });
@@ -114,6 +117,26 @@ async function main() {
     isEmailError("email_throttled"),
   );
 
+  // --- A rejected new recipient is not retained; the map is capped and swept. ---
+  const small = new EmailThrottle({ perRecipient: 10, perSender: 1, windowMs: 60_000, maxRecipientKeys: 5 }, () => clock);
+  await sendEmail({ to: "kept@example.invalid", subject: "Code", text: "Synthetic body" }, { transport: quietFake, throttle: small, from: FROM });
+  await assert.rejects(
+    sendEmail({ to: "rejected@example.invalid", subject: "Code", text: "Synthetic body" }, { transport: quietFake, throttle: small, from: FROM }),
+    isEmailError("email_throttled"),
+  );
+  const hitsOf = (throttle: EmailThrottle) => (throttle as unknown as { hits: Map<string, number[]> }).hits;
+  assert.equal(hitsOf(small).size, 2, "a rejected recipient must not add a map entry");
+
+  let sweepClock = Date.parse("2026-11-02T08:00:00Z");
+  const bounded = new EmailThrottle({ perRecipient: 100, perSender: 1000, windowMs: 60_000, maxRecipientKeys: 3 }, () => sweepClock);
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await sendEmail({ to: `bulk-${attempt}@example.invalid`, subject: "Code", text: "Synthetic body" }, { transport: quietFake, throttle: bounded, from: FROM });
+  }
+  assert.ok(hitsOf(bounded).size <= 4, `recipient map grew to ${hitsOf(bounded).size}`);
+  sweepClock += 60_001;
+  await sendEmail({ to: "after-window@example.invalid", subject: "Code", text: "Synthetic body" }, { transport: quietFake, throttle: bounded, from: FROM });
+  assert.ok(hitsOf(bounded).size <= 2, `expired recipients were retained (${hitsOf(bounded).size} keys)`);
+
   // --- Invalid input never reaches a transport. ---
   for (const message of [
     { to: "a@example.invalid\r\nBcc: victim@example.invalid", subject: "Code", text: "Synthetic body" },
@@ -143,6 +166,9 @@ async function main() {
     sendEmail({ to: "a@example.invalid", subject: "Code", text: "Synthetic body" }),
     isEmailError("email_unavailable"),
   );
+  // A blank setting from Compose must still mean "use the production default".
+  setEnv({ EMAIL_TRANSPORT: "" });
+  assert.throws(() => getEmailTransport(), /EMAIL_FROM/);
   setEnv({ EMAIL_TRANSPORT: "resend", EMAIL_FROM: FROM });
   assert.throws(() => getEmailTransport(), /RESEND_API_KEY/);
   setEnv({ EMAIL_TRANSPORT: "fake" });
