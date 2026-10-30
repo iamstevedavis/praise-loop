@@ -1,11 +1,8 @@
 import { File, Paths } from "expo-file-system";
-import { ApiError } from "../api/client";
 import { appConfig } from "../config";
+import { absoluteMediaUrl, mapImageDownloadError } from "../media/draftImage";
 
-export function absoluteMediaUrl(baseUrl: string, imagePath: string): string {
-  const root = baseUrl.replace(/\/+$/, "");
-  return `${root}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
-}
+export { absoluteMediaUrl } from "../media/draftImage";
 
 type DownloadOptions = {
   baseUrl?: string;
@@ -18,6 +15,8 @@ type DownloadOptions = {
 // into the app cache and handed to the share sheet as a local file. Nothing is
 // made public for a provider to fetch.
 export async function downloadDraftImage({ baseUrl = appConfig.apiBaseUrl, token, draftId, imagePath }: DownloadOptions): Promise<string> {
+  // Share keeps its own filename so discarding it after the share sheet closes
+  // cannot remove the file the queue and draft screen are showing.
   const target = new File(Paths.cache, `praiseloop-draft-${draftId}.png`);
   try {
     const file = await File.downloadFileAsync(absoluteMediaUrl(baseUrl, imagePath), target, {
@@ -26,13 +25,7 @@ export async function downloadDraftImage({ baseUrl = appConfig.apiBaseUrl, token
     });
     return file.uri;
   } catch (error) {
-    // expo-file-system reports a non-2xx as "HTTP 401" / "response has status:
-    // 401". Surface an expired session as such so the app can return to sign-in
-    // instead of suggesting the owner check their connection.
-    if (/\b401\b/.test(error instanceof Error ? error.message : String(error))) {
-      throw new ApiError("signedOut", 401);
-    }
-    throw error;
+    throw mapImageDownloadError(error);
   }
 }
 

@@ -1,0 +1,118 @@
+import { ApiError } from "../src/api/client";
+import {
+  createDraftImageLoader,
+  draftImageCacheName,
+  type CachedImageFile,
+  type ImageFileSystem
+} from "../src/media/draftImage";
+
+function harness() {
+  const files = new Map<string, CachedImageFile>();
+  const calls: { url: string; headers: Record<string, string>; target: string }[] = [];
+
+  const fs: ImageFileSystem = {
+    cacheFile(name) {
+      let file = files.get(name);
+      if (!file) {
+        file = { uri: `file:///cache/${name}`, exists: false };
+        files.set(name, file);
+      }
+      return file;
+    },
+    async download(url, target, headers) {
+      calls.push({ url, headers, target: target.uri });
+      target.exists = true;
+      return target;
+    }
+  };
+
+  return { fs, calls, files };
+}
+
+describe("draft image loader", () => {
+  it("downloads the protected PNG with the bearer token and returns the local file", async () => {
+    const { fs, calls } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000/", fs });
+
+    await expect(loader.load("mobile-token", "/api/media/draft-1.png"))
+      .resolves.toBe("file:///cache/praiseloop-media-draft-1.png");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("http://localhost:3000/api/media/draft-1.png");
+    expect(calls[0].headers).toEqual({ authorization: "Bearer mobile-token" });
+  });
+
+  it("shares one download between the queue and the draft screen", async () => {
+    const { fs, calls } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+
+    const [first, second] = await Promise.all([
+      loader.load("mobile-token", "/api/media/draft-1.png"),
+      loader.load("mobile-token", "/api/media/draft-1.png")
+    ]);
+    const third = await loader.load("mobile-token", "/api/media/draft-1.png");
+
+    expect(first).toBe("file:///cache/praiseloop-media-draft-1.png");
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("retries after a failed download instead of caching the failure", async () => {
+    const { fs, calls } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+    const realDownload = fs.download;
+    fs.download = async () => {
+      throw new Error("socket closed");
+    };
+
+    await expect(loader.load("mobile-token", "/api/media/draft-2.png")).rejects.toThrow("socket closed");
+    fs.download = realDownload;
+
+    await expect(loader.load("mobile-token", "/api/media/draft-2.png"))
+      .resolves.toBe("file:///cache/praiseloop-media-draft-2.png");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("turns an HTTP 401 into the app's signed-out error", async () => {
+    const { fs } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+    fs.download = async () => {
+      throw new Error("UnableToDownload: response has status: 401");
+    };
+
+    const error = await loader.load("expired-token", "/api/media/draft-3.png").catch(cause => cause);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ kind: "signedOut", status: 401 });
+  });
+
+  it("redownloads when the OS evicted the cached file", async () => {    const { fs, calls, files } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+
+    await loader.load("mobile-token", "/api/media/draft-4.png");
+    const cached = files.get(draftImageCacheName("/api/media/draft-4.png"));
+    expect(cached?.exists).toBe(true);
+    if (cached) cached.exists = false;
+
+    await expect(loader.load("mobile-token", "/api/media/draft-4.png"))
+      .resolves.toBe("file:///cache/praiseloop-media-draft-4.png");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("drops the in-memory cache when a session ends", async () => {
+    const { fs, calls } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+
+    await loader.load("mobile-token", "/api/media/draft-5.png");
+    loader.clear();
+    await loader.load("mobile-token", "/api/media/draft-5.png");
+
+    expect(calls).toHaveLength(2);
+  });
+
+  it("keeps a server path from escaping the cache directory", () => {
+    expect(draftImageCacheName("../../etc/passwd")).toBe("praiseloop-media-passwd");
+    expect(draftImageCacheName("/api/media/../../evil.png")).toBe("praiseloop-media-evil.png");
+  });
+});
