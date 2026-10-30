@@ -155,8 +155,10 @@ Stop writes, retain `posting_slot_claims` and `businesses.posting_slots`. Migrat
 
 Quote-card rendering uses Sharp/Pango measured wrapping with Bricolage Grotesque, loaded
 from `assets/fonts` (SIL OFL, licence alongside), on a 1080px canvas with 80px safe margins
-and automatic black/white contrast. Layout: rating stars top left, the verbatim quote in
-the middle, reviewer and business name bottom left, logo bottom right. Quotes fit at
+and automatic black/white contrast. Layout: rating stars top left and the business name
+top right as a small brand header, the verbatim quote in the middle, the reviewer's name
+as the signature bottom left, logo bottom right. A review with no reviewer name has no
+signature: the business name is never used as one. Quotes fit at
 32–48px (Large: 40–56px); unfit text is rejected verbatim, never truncated. The Polished
 (`premium`) tone sets the quote in DejaVu Serif. Supply optional logos as PNG/JPEG/WebP base64 data URLs (256 KB,
 4 MP maximum); remote URLs/SVG/animation are rejected without network requests.
