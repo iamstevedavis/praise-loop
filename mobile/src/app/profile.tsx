@@ -33,24 +33,33 @@ export default function ProfileScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
-  // Pure fetch, so the effect below only sets state after its await.
-  const fetchAll = useCallback(() => Promise.all([
-    fetchProfile(api),
-    bestEffort(fetchEntitlements(api))
-  ]), []);
-
-  const applyLoaded = useCallback((loadedProfile: Profile, loadedPlan: Entitlements | null) => {
-    setProfile(loadedProfile);
-    setPlan(loadedPlan);
-    setPlanError(!loadedPlan);
-    setProfileError(null);
-    setLoading(false);
+  // Pure fetches, so the effect below only sets state after its await. The two
+  // requests settle independently: a profile failure must not discard a plan
+  // that did load, and vice versa.
+  const fetchAll = useCallback(async () => {
+    const [loadedProfile, loadedPlan] = await Promise.allSettled([
+      fetchProfile(api),
+      bestEffort(fetchEntitlements(api))
+    ]);
+    return { loadedProfile, loadedPlan };
   }, []);
 
-  const loadFailed = useCallback((cause: unknown) => {
-    // A 401 ends the session and returns to sign-in; anything else is retryable here.
-    handleError(cause);
-    setProfileError("Couldn't load your profile. Check your connection and try again.");
+  const applyLoaded = useCallback(({ loadedProfile, loadedPlan }: Awaited<ReturnType<typeof fetchAll>>) => {
+    if (loadedProfile.status === "fulfilled") {
+      setProfile(loadedProfile.value);
+      setProfileError(null);
+    } else {
+      // A 401 ends the session and returns to sign-in; anything else is retryable here.
+      handleError(loadedProfile.reason);
+      setProfileError("Couldn't load your profile. Check your connection and try again.");
+    }
+    if (loadedPlan.status === "fulfilled") {
+      setPlan(loadedPlan.value);
+      setPlanError(!loadedPlan.value);
+    } else {
+      handleError(loadedPlan.reason);
+      setPlanError(true);
+    }
     setLoading(false);
   }, [handleError]);
 
@@ -58,29 +67,20 @@ export default function ProfileScreen() {
     if (status !== "signedIn") return;
     let cancelled = false;
     void (async () => {
-      try {
-        const [loadedProfile, loadedPlan] = await fetchAll();
-        if (!cancelled) applyLoaded(loadedProfile, loadedPlan);
-      } catch (cause) {
-        if (!cancelled) loadFailed(cause);
-      }
+      const loaded = await fetchAll();
+      if (!cancelled) applyLoaded(loaded);
     })();
     return () => { cancelled = true; };
-  }, [applyLoaded, fetchAll, loadFailed, status]);
+  }, [applyLoaded, fetchAll, status]);
 
   // Retries are owner actions, not effects, so the spinner is turned on here.
   const retry = useCallback(() => {
     setLoading(true);
     setPlanError(false);
     void (async () => {
-      try {
-        const [loadedProfile, loadedPlan] = await fetchAll();
-        applyLoaded(loadedProfile, loadedPlan);
-      } catch (cause) {
-        loadFailed(cause);
-      }
+      applyLoaded(await fetchAll());
     })();
-  }, [applyLoaded, fetchAll, loadFailed]);
+  }, [applyLoaded, fetchAll]);
 
   const startEditing = useCallback(() => {
     setDraftName(displayName(profile) ?? "");
