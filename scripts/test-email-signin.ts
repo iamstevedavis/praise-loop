@@ -52,6 +52,14 @@ async function main() {
   const savedNodeEnv = process.env.NODE_ENV;
   (process.env as Record<string, string | undefined>).NODE_ENV = "development";
 
+  // An email-only deployment has no Google credentials. NextAuth must still answer
+  // session/sign-out requests, or the email session's sign-out button cannot revoke it.
+  delete process.env.GOOGLE_CLIENT_ID;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+  const { authConfigured, authOptions } = require("../lib/auth");
+  assert.equal(authConfigured(), true);
+  assert.equal(authOptions.providers.length, 0);
+
   assert.equal(normalizeEmail("  Owner@Example.INVALID "), "owner@example.invalid");
   assert.equal(normalizeEmail("not-an-address"), null);
   assert.equal(normalizeEmail(42), null);
@@ -111,6 +119,22 @@ async function main() {
     assert.notEqual(oldCode, newCode);
     assert.equal((await verify(web("/api/auth/email/verify", { email: "supersede@example.invalid", code: oldCode }))).status, 400);
     assert.equal((await verify(web("/api/auth/email/verify", { email: "supersede@example.invalid", code: newCode }))).status, 200);
+
+    // Two requests for one address at once leave exactly one live code, not two.
+    fresh();
+    const concurrent = await Promise.all([
+      request(web("/api/auth/email/request", { email: "concurrent@example.invalid" })),
+      request(web("/api/auth/email/request", { email: "concurrent@example.invalid" }))
+    ]);
+    assert.deepEqual(concurrent.map(r => r.status), [200, 200]);
+    assert.equal(await count("SELECT count(*)::int n FROM email_sign_in_codes WHERE email='concurrent@example.invalid' AND consumed_at IS NULL AND superseded_at IS NULL"), 1);
+    const concurrentCodes = emailOutbox().map(message => /code is (\d{6})/.exec(message.text)![1]);
+    assert.equal(concurrentCodes.length, 2);
+    const concurrentResults = [];
+    for (const value of concurrentCodes) {
+      concurrentResults.push((await verify(web("/api/auth/email/verify", { email: "concurrent@example.invalid", code: value }))).status);
+    }
+    assert.deepEqual(concurrentResults.sort(), [200, 400]);
 
     // An expired code is rejected.
     fresh();
