@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
@@ -62,6 +62,11 @@ export default function DraftScreen() {
   usePreventRemove(shareBusy, () => {
     setNotice({ tone: "warning", message: "Finishing the share first — try again in a moment." });
   });
+
+  // False once the owner has left this screen. A request that finishes afterwards must not pop
+  // whatever screen they have opened since.
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
   const fetchDraft = useCallback(async () => {
     const drafts = await listDrafts(api, businessId);
@@ -175,7 +180,7 @@ export default function DraftScreen() {
     setNotice(null);
     try {
       await regenerateDraft(api, draft);
-      router.back();
+      if (mounted.current) router.back();
     } catch (error) {
       handleError(error);
       setNotice({ tone: "danger", message: message(error, "Couldn't start a new version.") });
