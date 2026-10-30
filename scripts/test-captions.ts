@@ -343,6 +343,18 @@ async function overlongCaptionRetryTest() {
   count = respond(() => documentedResponse("not json at all"));
   endsCleanly((await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" })).friendly);
 
+  // A retry value that is not a string never replaces a usable caption (it must not become "[object Object]").
+  count = respond(() => documentedResponse(JSON.stringify({ friendly: { text: "Thank you for visiting!" } })));
+  const kept = await generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" });
+  assert.equal(count(), 2);
+  endsCleanly(kept.friendly);
+  assert.doesNotMatch(kept.friendly, /object Object/);
+  assert.match(kept.friendly, /Cafe Nova made our whole week/, "the original caption is cut to fit instead");
+
+  // A non-string value in the first response is a missing caption, not a coerced one.
+  stubFetch(async () => documentedResponse(JSON.stringify({ friendly: ["a"], premium: ok, playful: ok })));
+  await assert.rejects(() => generateCaptionVariants({ businessName: "Cafe Nova", quoteText: "x" }), /Caption missing for style: friendly/);
+
   // The prompt asks for less than the hard limit.
   assert.match(prompts[0], /<= 180 characters \(hard limit 200\)/);
 }

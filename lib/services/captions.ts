@@ -113,13 +113,19 @@ function extractCaptionJson(raw: string): Record<string, unknown> {
 
 const STYLES = ["friendly", "premium", "playful"] as const;
 
+// Only a string is a caption. An object, array or number must read as missing, not be coerced to
+// "[object Object]" and accepted (or allowed to replace a good caption during the shortening retry).
+function captionText(value: unknown): string {
+  return typeof value === "string" ? normalizeCaption(value) : "";
+}
+
 // Parses the provider's JSON into normalized captions that may still be over the limit.
 function parseCaptionDraft(raw: string): CaptionStyles {
   const parsed = extractCaptionJson(raw);
   return {
-    friendly: normalizeCaption(String(parsed.friendly ?? "")),
-    premium: normalizeCaption(String(parsed.premium ?? "")),
-    playful: normalizeCaption(String(parsed.playful ?? ""))
+    friendly: captionText(parsed.friendly),
+    premium: captionText(parsed.premium),
+    playful: captionText(parsed.playful)
   };
 }
 
