@@ -10,10 +10,11 @@ export const DEV_OWNER_EMAIL = "demo@praiseloop.invalid";
 export const DEV_OWNER_NAME = "Demo Owner";
 
 // The seeder also creates a Free owner so the plan limits and watermark can be seen.
-// `pro` is the default demo owner above.
+// `pro` is the default demo owner above. `free` has no name on purpose (#149), so
+// the profile empty state can be walked; the seeder clears it on every run.
 export const DEV_OWNERS = {
   pro: { id: DEV_OWNER_ID, email: DEV_OWNER_EMAIL, name: DEV_OWNER_NAME },
-  free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: "Demo Free Owner" }
+  free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: null as string | null }
 } as const;
 export type DevOwnerKey = keyof typeof DEV_OWNERS;
 

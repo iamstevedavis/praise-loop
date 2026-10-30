@@ -304,3 +304,29 @@ wall does not hide it.
   treats `/` and `/plans` as public pages), so a visitor can read the plans and
   then choose "Continue with Google".
 
+## Owner profile (#149)
+
+An owner can see who they are signed in as and fix a missing or wrong display name.
+One owner-authenticated endpoint serves the web profile menu (#150) and the phone
+profile screen (#151), so the two cannot disagree.
+
+- `GET /api/profile` returns `name` (null when Google supplied none and the owner
+  has not set one), `email`, `nameSource` (`provider`, `owner`, or null without a
+  name), `provider` (`google`, the only owner provider) and `initials` for the
+  avatar. It returns no
+  provider tokens and no other internal ids; the owner comes from the session, so
+  another owner's row is never reachable. The response is `Cache-Control: private,
+  no-store`.
+- `PATCH /api/profile` accepts `{ "name": "..." }`, trimmed to 1–80 characters and
+  rejecting control characters with 400. The email is read-only: it is the
+  verified Google identity and changing it would break account linking.
+- Migration 016 adds `auth_users.name_source`. A name the owner sets is recorded as
+  `owner` and survives the next Google sign-in on the web and the phone, while an
+  empty name may still be filled from the provider. The demo seeder's Free owner
+  has no name, so the empty state is visible after `npm run dev:seed`.
+- Both cookie and mobile bearer sessions use the same guard. Anonymous requests get
+  401 (the route inventory in `scripts/test-authorization.ts`), and
+  `scripts/test-profile.ts` covers provider, missing and owner-edited names, the
+  sign-in-after-edit case and the read-only email.
+- Avatars show initials for now; keeping Google's profile picture is a later
+  decision (see `docs/decisions.md`).
