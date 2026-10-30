@@ -8,10 +8,11 @@ export function usageFor(plan: Entitlements | null, businessId: number | null): 
   return plan?.usage.find(item => item.businessId === businessId) ?? null;
 }
 
-export function expiryNote(plan: Entitlements, now = new Date()): string | null {
+export function expiryNote(plan: Entitlements): string | null {
   if (!plan.expiresAt) return null;
   const date = plan.expiresAt.slice(0, 10);
-  if (plan.plan === "free") return new Date(plan.expiresAt).getTime() <= now.getTime() ? `Your Pro plan expired on ${date}, so you are on the Free plan.` : null;
+  if (plan.expired) return `Your Pro plan expired on ${date}, so you are on the Free plan.`;
+  if (plan.plan === "free") return null;
   return `Your ${planName(plan.plan)} plan runs until ${date}.`;
 }
 
@@ -24,14 +25,14 @@ export function quotaMetMessage(plan: Entitlements, usage: WeeklyUsage): string 
     : `You’ve made all ${posts(usage.target)} you asked for this week. The ${planName(plan.plan)} plan allows up to ${cap} a week.`;
 }
 
-export function planLines(plan: Entitlements, usage: WeeklyUsage | null, now = new Date()): string[] {
+export function planLines(plan: Entitlements, usage: WeeklyUsage | null): string[] {
   const { limits } = plan;
   const lines = [
     `${planName(plan.plan)} plan`,
     `${posts(limits.postsPerWeek)} a week per business, ${limits.businesses} ${limits.businesses === 1 ? "business" : "businesses"}`,
     `Watermark: ${limits.watermark ? "yes" : "no"}. Review sync: ${limits.reviewSync ? "yes" : "no"}. AI replies: ${limits.aiReplies ? "yes" : "no"}`
   ];
-  const note = expiryNote(plan, now);
+  const note = expiryNote(plan);
   if (note) lines.push(note);
   if (usage) lines.push(`${usage.allocated} of ${usage.target} ${usage.target === 1 ? "post" : "posts"} this week, resets ${usage.resetsOn} (${usage.timezone})`);
   return lines;

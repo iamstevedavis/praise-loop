@@ -6,7 +6,7 @@ import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
 import { usePlan } from "../ui/usePlan";
-import { expiryNote, formatLocalDate, quotaMetMessage } from "../../lib/planDisplay";
+import { weekLimitNotice } from "../../lib/planDisplay";
 import PostCard, { stageOf, type Draft, type Stage } from "./PostCard";
 
 const conflict = "This post changed somewhere else. We loaded the latest version — try again.";
@@ -112,10 +112,7 @@ export default function ThisWeekPage() {
     : "Nothing to review yet";
   // The server owns the limits; when this week's quota is used up, name the plan limit.
   const usage = plan?.usage.find(u => String(u.businessId) === String(business.id));
-  const limitMessage = plan && usage ? quotaMetMessage(plan, usage) : null;
-  const limitNote = plan && usage && limitMessage
-    ? `${limitMessage} New posts start ${formatLocalDate(usage.resetsOn)}.${expiryNote(plan) ? ` ${expiryNote(plan)}` : ""}`
-    : null;
+  const limitNote = plan ? weekLimitNotice(plan, usage) : null;
 
   return (
     <>
@@ -146,7 +143,7 @@ export default function ThisWeekPage() {
         <section aria-label="Posts for this week" className="pl-grid">
           {active.map(d => <PostCard key={d.id} draft={d} run={run} busy={busy} />)}
         </section>
-      ) : !groups.scheduled.length && !groups.shared.length ? (
+      ) : !groups.scheduled.length && !groups.shared.length && !limitNote ? (
         <div className="pl-empty">
           <h2>Your next posts start with reviews</h2>
           <p className="pl-muted">We make new posts from your reviews each week. Add more reviews to keep them coming.</p>

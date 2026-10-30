@@ -17,6 +17,7 @@ export type Entitlements = {
   plan: "free" | "pro";
   source: "default" | "manual" | "store";
   expiresAt: string | null;
+  expired: boolean;
   limits: { postsPerWeek: number; templates: number; watermark: boolean; reviewSync: boolean; aiReplies: boolean; businesses: number };
   usage: WeeklyUsage[];
 };
