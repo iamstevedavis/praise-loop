@@ -23,10 +23,19 @@ function harness() {
       calls.push({ url, headers, target: target.uri });
       target.exists = true;
       return target;
+    },
+    listCached() {
+      return [...files.entries()]
+        .filter(([name]) => name.startsWith("praiseloop-media-"))
+        .map(([, file]) => {
+          file.delete = () => { file.exists = false; deleted.push(file.uri); };
+          return file;
+        });
     }
   };
+  const deleted: string[] = [];
 
-  return { fs, calls, files };
+  return { fs, calls, files, deleted };
 }
 
 describe("draft image loader", () => {
@@ -109,6 +118,28 @@ describe("draft image loader", () => {
     await loader.load("mobile-token", "/api/media/draft-5.png");
 
     expect(calls).toHaveLength(2);
+  });
+
+  it("removes the cached image files when a session ends", async () => {
+    const { fs, files, deleted } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+
+    await loader.load("mobile-token", "/api/media/draft-6.png");
+    await loader.load("mobile-token", "/api/media/draft-7.png");
+    loader.clear();
+
+    expect(deleted.sort()).toEqual(["file:///cache/praiseloop-media-draft-6.png", "file:///cache/praiseloop-media-draft-7.png"]);
+    expect(files.get(draftImageCacheName("/api/media/draft-6.png"))?.exists).toBe(false);
+  });
+
+  it("never throws when the cache cannot be listed or a file cannot be deleted", async () => {
+    const { fs } = harness();
+    const loader = createDraftImageLoader({ baseUrl: "http://localhost:3000", fs });
+    fs.listCached = () => { throw new Error("cache unavailable"); };
+    expect(() => loader.clear()).not.toThrow();
+
+    fs.listCached = () => [{ uri: "file:///cache/praiseloop-media-x.png", exists: true, delete: () => { throw new Error("busy"); } }];
+    expect(() => loader.clear()).not.toThrow();
   });
 
   it("keeps a server path from escaping the cache directory", () => {
