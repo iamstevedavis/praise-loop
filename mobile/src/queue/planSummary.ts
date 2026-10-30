@@ -37,3 +37,11 @@ export function planLines(plan: Entitlements, usage: WeeklyUsage | null): string
   if (usage) lines.push(`${usage.allocated} of ${usage.target} ${usage.target === 1 ? "post" : "posts"} this week, resets ${usage.resetsOn} (${usage.timezone})`);
   return lines;
 }
+
+// This week's usage for every owned business, for the profile screen where there
+// is no selected queue to scope it to. Each line names its business.
+export function planUsageLines(plan: Entitlements | null): string[] {
+  return (plan?.usage ?? []).map(usage =>
+    `${usage.name}: ${usage.allocated} of ${usage.target} ${usage.target === 1 ? "post" : "posts"} this week, resets ${usage.resetsOn} (${usage.timezone})`
+  );
+}

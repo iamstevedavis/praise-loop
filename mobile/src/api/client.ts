@@ -39,6 +39,16 @@ export function isSignedOut(error: unknown): boolean {
   return error instanceof ApiError && error.kind === "signedOut";
 }
 
+// For the requests a screen can live without (the plan, the profile). A failure
+// becomes null so it never hides the screen's real content, but a 401 still
+// rejects: the session really is over and belongs on the handleError path.
+export function bestEffort<T>(request: Promise<T>): Promise<T | null> {
+  return request.catch(error => {
+    if (isSignedOut(error)) throw error;
+    return null;
+  });
+}
+
 export type ApiRequest = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;

@@ -53,6 +53,26 @@ export function Section({ title, children, hint }: { title: string; children: Re
   );
 }
 
+// The initials avatar that opens the profile screen. It carries no image: Google's
+// picture is not stored yet, so initials are the deliberate placeholder.
+export function Avatar({ initials, onPress, accessibilityLabel, size = "small" }: {
+  initials: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+  size?: "small" | "large";
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={[styles.avatar, size === "large" && styles.avatarLarge]}
+    >
+      <Text style={[styles.avatarText, size === "large" && styles.avatarTextLarge]}>{initials}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   button: { minHeight: 48, borderRadius: 999, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", flexDirection: "row" },
   primary: { backgroundColor: colors.ink },
@@ -80,5 +100,9 @@ const styles = StyleSheet.create({
   bannerDangerText: { color: colors.danger },
   section: { gap: 10, marginTop: 22 },
   sectionTitle: { fontSize: 20, fontWeight: "700", color: colors.ink },
-  sectionHint: { fontSize: 14, lineHeight: 20, color: colors.muted, marginTop: -4 }
+  sectionHint: { fontSize: 14, lineHeight: 20, color: colors.muted, marginTop: -4 },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.ink, alignItems: "center", justifyContent: "center" },
+  avatarLarge: { width: 64, height: 64, borderRadius: 32 },
+  avatarText: { fontSize: 15, fontWeight: "700", letterSpacing: 0.3, color: "#ffffff" },
+  avatarTextLarge: { fontSize: 22 }
 });

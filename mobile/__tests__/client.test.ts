@@ -1,4 +1,4 @@
-import { ApiError, createApiClient } from "../src/api/client";
+import { ApiError, bestEffort, createApiClient } from "../src/api/client";
 
 function response(status: number, body: unknown = {}) {
   return {
@@ -98,5 +98,12 @@ describe("api client", () => {
     const error = await failure(createApiClient({ baseUrl: "" }).request("/api/mobile/config"));
     expect(error.kind).toBe("network");
     expect(error.message).toMatch(/API_BASE_URL/);
+  });
+
+  it("turns an optional request's failure into null but still ends the session on a 401", async () => {
+    await expect(bestEffort(Promise.resolve({ name: "Ada" }))).resolves.toEqual({ name: "Ada" });
+    await expect(bestEffort(client((async () => { throw new Error("offline"); }) as typeof fetch).request("/api/profile"))).resolves.toBeNull();
+    const signedOut = client((async () => response(401)) as typeof fetch).request("/api/profile");
+    await expect(bestEffort(signedOut)).rejects.toMatchObject({ kind: "signedOut" });
   });
 });
