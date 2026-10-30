@@ -38,6 +38,31 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 .pl-switcher label { font-size: 12px; font-weight: 600; color: var(--pl-muted); padding: 0 4px; }
 .pl-account { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 0 8px; font-size: 13px; color: var(--pl-muted); }
 .pl-link-button { padding: 0; border: 0; background: none; color: var(--pl-green); font-weight: 600; cursor: pointer; text-align: left; min-height: 32px; }
+
+/* Profile menu (#150): avatar button, menu, and the inline name form. */
+.pl-profile { position: relative; }
+.pl-profile-button { display: inline-flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 4px 6px; border: 1px solid transparent; border-radius: 12px; background: none; color: var(--pl-ink); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.pl-profile-button:hover { background: var(--pl-ground); }
+.pl-avatar { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: var(--pl-green-soft); color: var(--pl-green); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+.pl-profile-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-profile-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; width: min(320px, calc(100vw - 32px)); padding: 8px; border-radius: 14px; border: 1px solid var(--pl-line); background: var(--pl-surface); box-shadow: 0 12px 32px rgba(23, 32, 28, 0.16); display: flex; flex-direction: column; gap: 4px; }
+/* The sidebar button is at the bottom, so its menu opens upwards. */
+.pl-sidebar .pl-profile-menu { top: auto; bottom: calc(100% + 8px); right: auto; left: 0; }
+.pl-profile-head { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--pl-line-soft); }
+.pl-profile-head strong { font-size: 15px; overflow-wrap: anywhere; }
+.pl-profile-head span { overflow-wrap: anywhere; }
+.pl-profile-items { display: flex; flex-direction: column; }
+.pl-profile-items a, .pl-profile-items button { display: flex; align-items: center; min-height: 40px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--pl-ink); font-size: 15px; font-weight: 500; text-align: left; text-decoration: none; cursor: pointer; }
+.pl-profile-items a:hover, .pl-profile-items button:hover { background: var(--pl-ground); color: var(--pl-ink); }
+.pl-profile-signout { color: #A3361F !important; }
+.pl-profile-form { display: flex; flex-direction: column; gap: 10px; padding: 4px 4px 8px; }
+.pl-profile-form-actions { display: flex; gap: 8px; }
+.pl-profile-form-actions .pl-btn { flex: 1 1 auto; }
+.pl-error { color: #A3361F; font-weight: 600; }
+.pl-profile-compact .pl-profile-button { width: auto; }
+.pl-profile-compact .pl-profile-label { display: none; }
+.pl-profile-compact .pl-profile-menu { left: auto; right: 0; }
+.pl-topbar-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pl-main { flex: 1; min-width: 0; padding: 40px clamp(16px, 4vw, 56px) 64px; }
 .pl-container { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
 .pl-topbar, .pl-tabbar { display: none; }
@@ -47,11 +72,12 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
   .pl-sidebar { display: none; }
   .pl-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--pl-surface); border-bottom: 1px solid var(--pl-line); }
   .pl-topbar .pl-brand { font-size: 18px; }
+  .pl-topbar .pl-brand-text { display: none; }
   .pl-topbar .pl-switcher { min-width: 0; }
   .pl-topbar .pl-switcher label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .pl-topbar .pl-select { max-width: 48vw; }
   .pl-main { padding: 20px 16px 96px; }
-  .pl-tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 6px 4px calc(10px + env(safe-area-inset-bottom)); background: var(--pl-surface); border-top: 1px solid var(--pl-line); }
+  .pl-tabbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 6px 4px calc(10px + env(safe-area-inset-bottom)); background: var(--pl-surface); border-top: 1px solid var(--pl-line); }
   .pl-tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 52px; color: var(--pl-muted); font-size: 12px; font-weight: 600; text-decoration: none; }
   .pl-tabbar a[aria-current="page"] { color: var(--pl-green); font-weight: 700; }
 }
