@@ -1,4 +1,4 @@
-import type { ApiClient } from "./client";
+import { ApiError, type ApiClient } from "./client";
 
 export type DraftStatus = "draft" | "approved" | "archived" | "shared" | "failed" | "scheduled" | "published";
 
@@ -143,6 +143,26 @@ export async function setDraftStatus(
     body: { draftPostId: draft.id, status, version: draft.version }
   });
   return responseDraft(data);
+}
+
+// Throws this message's wording when the server refuses because the post has used up its
+// regenerations; a 409 for a stale version keeps the usual "changed somewhere else" text.
+export const REGENERATE_EXHAUSTED = "This post has used its new versions for now. Archive it, or try again later.";
+
+// Queues a fresh caption and image for the post and clears its approval. The server answers 202
+// once the job is queued; the new version appears in the queue shortly after.
+export async function regenerateDraft(client: ApiClient, draft: Draft): Promise<void> {
+  try {
+    await client.request("/api/generation/regenerate", {
+      method: "POST",
+      body: { draftPostId: draft.id, version: draft.version }
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === "conflict" && /retry budget|no recoverable job/i.test(error.detail ?? "")) {
+      throw new ApiError("http", 409, REGENERATE_EXHAUSTED);
+    }
+    throw error;
+  }
 }
 
 // Mirrors the server's caption rule so the button explains the problem before

@@ -11,12 +11,26 @@ const messages: Record<Exclude<ApiErrorKind, "http">, string> = {
 export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   readonly status?: number;
+  // The server's own words on a 409, so a caller can tell a stale version from
+  // another refusal. For matching only; never shown to the owner as-is.
+  readonly detail?: string;
 
-  constructor(kind: ApiErrorKind, status?: number, message?: string) {
+  constructor(kind: ApiErrorKind, status?: number, message?: string, detail?: string) {
     super(message ?? (kind === "http" ? "That didn’t work. Try again." : messages[kind]));
     this.name = "ApiError";
     this.kind = kind;
     this.status = status;
+    this.detail = detail;
+  }
+}
+
+async function conflictDetail(response: Response): Promise<string | undefined> {
+  try {
+    const data = await response.json() as { message?: unknown; error?: unknown } | null;
+    const text = typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : undefined;
+    return text?.slice(0, 200);
+  } catch {
+    return undefined;
   }
 }
 
@@ -60,7 +74,7 @@ export function createApiClient({ baseUrl, getToken, fetchImpl = fetch, timeoutM
       });
 
       if (response.status === 401) throw new ApiError("signedOut", 401);
-      if (response.status === 409) throw new ApiError("conflict", 409);
+      if (response.status === 409) throw new ApiError("conflict", 409, undefined, await conflictDetail(response));
       if (response.status === 429) throw new ApiError("limit", 429);
       if (!response.ok) {
         const data = await response.json().catch(() => null) as { error?: unknown } | null;

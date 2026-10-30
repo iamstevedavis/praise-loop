@@ -56,6 +56,15 @@ describe("api client", () => {
     expect(headers.authorization).toBeUndefined();
   });
 
+  it("keeps the server's words on a 409 for matching, without showing them", async () => {
+    const withBody = await failure(client((async () => response(409, { message: "Draft changed; refresh and retry" })) as typeof fetch).request("/api/drafts/status"));
+    expect(withBody.detail).toBe("Draft changed; refresh and retry");
+    expect(withBody.message).not.toMatch(/Draft changed/);
+    const unreadable = await failure(client((async () => ({ ok: false, status: 409, json: async () => { throw new Error("not json"); } }) as unknown as Response) as typeof fetch).request("/api/drafts/status"));
+    expect(unreadable.kind).toBe("conflict");
+    expect(unreadable.detail).toBeUndefined();
+  });
+
   it("maps 401, 409 and 429 to actionable errors", async () => {
     expect((await failure(client((async () => response(401)) as typeof fetch).request("/api/businesses"))).kind).toBe("signedOut");
     const conflict = await failure(client((async () => response(409)) as typeof fetch).request("/api/drafts/status"));
