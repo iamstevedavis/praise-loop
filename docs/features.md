@@ -389,7 +389,7 @@ instead of spreading account things through the nav and the business switcher.
   states can be walked with `npm run dev:seed`.
 
 
-### Phone profile screen (#151)
+## Phone profile screen (#151)
 
 The phone app reaches the profile from an initials avatar button in the queue
 header; it is a normal expo-router screen with its own back button, so opening a
