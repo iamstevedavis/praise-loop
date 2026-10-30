@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Regression coverage for the issue-48 tooling baseline: real lint, declared
@@ -56,4 +56,13 @@ for (const f of ["backup.sh", "restore.sh"]) {
   assert.doesNotMatch(read(`ops/${f}`), /gzip -t[^\n]*&&/, `${f} must validate archives as separate commands: set -e ignores the left side of &&`);
 }
 assert.match(read("ops/restore.sh"), /up -d --wait postgres/, "restore must wait for Postgres to be healthy");
+
+// Next 16 renamed the middleware convention to proxy; the old name only logs a deprecation warning and
+// may stop working. The proxy still must hide legacy public/generated files (the HTTP check in
+// test-auth-http.ts covers the running server).
+assert.ok(existsSync(join(root, "proxy.ts")), "the generated-assets guard must live in proxy.ts");
+assert.ok(!existsSync(join(root, "middleware.ts")), "middleware.ts is the deprecated name; use proxy.ts");
+const proxyModule = require("../proxy") as { proxy: () => Response; config: { matcher: string[] } };
+assert.deepEqual(proxyModule.config.matcher, ["/generated/:path*"], "the proxy must only match legacy generated paths");
+assert.equal(proxyModule.proxy().status, 404, "legacy public/generated files must never be served");
 console.log("tooling regression tests passed");
