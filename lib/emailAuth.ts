@@ -74,6 +74,9 @@ export async function requestEmailCode(email: string, ip: string, now = Date.now
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const hash = hashCode(email, code, key);
   await transaction(async () => {
+    // Serialize replacement for one address. Without this, two concurrent requests
+    // could both see no active row, insert, and leave two unsuperseded codes.
+    await query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [email]);
     await query(
       "UPDATE email_sign_in_codes SET superseded_at=now() WHERE email=$1 AND consumed_at IS NULL AND superseded_at IS NULL",
       [email]

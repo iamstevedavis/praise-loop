@@ -77,8 +77,9 @@ export default function HomePage() {
         setEmailError(result.status === 429 ? "Too many attempts. Try again later." : result.error ?? "That code is invalid or has expired.");
         return;
       }
-      // A full navigation makes every page see the new cookie immediately.
-      window.location.assign(notice.callbackUrl ?? "/approval");
+      // Reload so AppShell sees the new cookie and runs the existing, validated
+      // callback redirect instead of navigating to a query-string value here.
+      window.location.reload();
     } catch {
       setEmailError("Could not reach PraiseLoop; try again.");
     } finally { setBusy(false); }

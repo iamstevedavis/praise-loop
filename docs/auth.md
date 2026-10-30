@@ -19,7 +19,10 @@ Owner setup (no accounts, credentials, or production config created by this PR):
    Adding any sensitive scope (e.g. Business Profile for #46) changes that.
 3. Supply `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, a random `NEXTAUTH_SECRET` (32+
    bytes), and canonical `NEXTAUTH_URL`; use HTTPS in production. Never commit values.
-   Login returns an actionable 503 if setup is missing. Use Sign in / Sign out in nav.
+   Login and sign-out return an actionable 503 if `NEXTAUTH_URL` or `NEXTAUTH_SECRET`
+   is missing. Google sign-in additionally needs the client variables; email sign-in
+   does not, and its session can still be signed out when Google is unset. Use
+   Sign in / Sign out in nav.
 4. Keep DATABASE_URL private to the app/worker/operator. Worker runs in a separate
    process with direct DB access; no bearer token bypass or public worker endpoint.
 5. Verify an existing business belongs to the signed-in owner, locate their
