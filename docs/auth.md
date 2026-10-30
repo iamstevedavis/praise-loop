@@ -166,8 +166,12 @@ the mailbox.
 - The code is 6 digits from `crypto.randomInt`, lives 10 minutes, is single use, and a
   newer request supersedes the earlier one. Only an HMAC-SHA256 keyed with
   `NEXTAUTH_SECRET` is stored in `email_sign_in_codes`; the real transport never logs
-  the code. Five wrong guesses consume the code. Verify failures are limited to 10 per
-  15 minutes per client IP, counted in process memory like the Google limiter.
+  the code. Five wrong guesses consume the code. Because a new code starts its own
+  count, wrong guesses are also capped per address across all of its codes: after 15 in
+  an hour the address is refused (even for the right code) until they age out. That cap
+  is stored in Postgres, so a restart or another replica does not reset it. Verify
+  failures are also limited to 10 per 15 minutes per client IP, counted in process
+  memory like the Google limiter.
 - `POST /api/auth/email/verify` (`{email, code}`, public, same-origin only) sets the same
   hashed eight-hour Postgres session cookie as Google. `POST /api/mobile/session/email`
   is the phone equivalent and returns a normal bearer session. A wrong code is a `400`

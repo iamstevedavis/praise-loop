@@ -8,6 +8,9 @@ import { EmailError, getEmailTransport, oneTimeCodeEmail, sendEmail } from "./em
 // an owner: only a malformed code or an exhausted code is rejected.
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const CODE_MAX_ATTEMPTS = 5;
+// Wrong guesses allowed per address across all of its codes before the address is refused for a while.
+export const ADDRESS_MAX_FAILURES = 15;
+export const ADDRESS_FAILURE_WINDOW_MINUTES = 60;
 const CODE_PATTERN = /^\d{6}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REQUEST_WINDOW_MS = 15 * 60 * 1000;
@@ -110,6 +113,14 @@ export async function verifyEmailCode(email: string, code: string, now = Date.no
       [email]
     )).rows[0];
     if (!row) return null;
+    // A fresh code resets its own guess count, so an attacker who keeps requesting codes would get five
+    // more guesses each time. Cap the wrong guesses across every code for this address as well. This
+    // lives in Postgres, so a restart or a second web replica does not reset it.
+    const failed = Number((await query<{ n: string }>(
+      "SELECT coalesce(sum(attempts),0) AS n FROM email_sign_in_codes WHERE email=$1 AND created_at > now() - ($2 * interval '1 minute')",
+      [email, ADDRESS_FAILURE_WINDOW_MINUTES]
+    )).rows[0].n);
+    if (failed >= ADDRESS_MAX_FAILURES) return null;
     if (row.expires_at.getTime() <= now || row.attempts >= CODE_MAX_ATTEMPTS) {
       await query("UPDATE email_sign_in_codes SET consumed_at=coalesce(consumed_at,now()) WHERE id=$1", [row.id]);
       return null;

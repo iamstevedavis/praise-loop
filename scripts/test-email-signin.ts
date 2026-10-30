@@ -154,6 +154,25 @@ async function main() {
     assert.equal((await verify(web("/api/auth/email/verify", { email: "guesses@example.invalid", code: guessedCode }))).status, 400);
     assert.equal((await client.query("SELECT attempts,consumed_at FROM email_sign_in_codes WHERE email='guesses@example.invalid'")).rows[0].attempts, 5);
 
+    // A new code resets its own guess count, so wrong guesses are also capped per address across codes.
+    for (let round = 0; round < 3; round++) {
+      fresh();
+      assert.equal((await request(web("/api/auth/email/request", { email: "grind@example.invalid" }))).status, 200);
+      const grindWrong = wrongCodeFor(lastCode());
+      for (let i = 0; i < 5; i++) {
+        assert.equal((await verify(web("/api/auth/email/verify", { email: "grind@example.invalid", code: grindWrong }))).status, 400);
+      }
+    }
+    fresh();
+    assert.equal((await request(web("/api/auth/email/request", { email: "grind@example.invalid" }))).status, 200);
+    const lockedCode = lastCode();
+    assert.equal((await verify(web("/api/auth/email/verify", { email: "grind@example.invalid", code: lockedCode }))).status, 400,
+      "the right code is refused once the address has used up its guesses");
+    assert.equal((await client.query("SELECT attempts FROM email_sign_in_codes WHERE email='grind@example.invalid' ORDER BY id DESC LIMIT 1")).rows[0].attempts, 0, "a refused attempt is not counted again");
+    // Once the window has passed the same address can sign in again.
+    await client.query("UPDATE email_sign_in_codes SET created_at=created_at-interval '2 hours' WHERE email='grind@example.invalid' AND id < (SELECT max(id) FROM email_sign_in_codes WHERE email='grind@example.invalid')");
+    assert.equal((await verify(web("/api/auth/email/verify", { email: "grind@example.invalid", code: lockedCode }))).status, 200);
+
     // An address already known as a Google owner keeps one owner and gains an email
     // method; the existing businesses are untouched.
     await client.query(`INSERT INTO auth_users(id,name,email,"emailVerified") VALUES('google-owner','Google Owner','google@example.invalid',now())`);
