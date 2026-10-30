@@ -1,4 +1,4 @@
-import { File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import { ApiError } from "../api/client";
 import { appConfig } from "../config";
 
@@ -20,17 +20,24 @@ export function mapImageDownloadError(error: unknown): unknown {
 export type CachedImageFile = {
   uri: string;
   exists: boolean;
+  delete?: () => void;
 };
 
 export type ImageFileSystem = {
   cacheFile: (name: string) => CachedImageFile;
   download: (url: string, target: CachedImageFile, headers: Record<string, string>) => Promise<CachedImageFile>;
+  // The draft images this app has cached, so they can be removed when the session ends.
+  listCached: () => CachedImageFile[];
 };
+
+const CACHE_PREFIX = "praiseloop-media-";
 
 const nativeFileSystem: ImageFileSystem = {
   cacheFile: name => new File(Paths.cache, name),
   download: (url, target, headers) =>
-    File.downloadFileAsync(url, target as File, { headers, idempotent: true })
+    File.downloadFileAsync(url, target as File, { headers, idempotent: true }),
+  listCached: () => new Directory(Paths.cache).list()
+    .filter((entry): entry is File => entry instanceof File && entry.name.startsWith(CACHE_PREFIX))
 };
 
 // Keep only the filename from the server's media path. A draft image path is
@@ -38,7 +45,7 @@ const nativeFileSystem: ImageFileSystem = {
 export function draftImageCacheName(imagePath: string): string {
   const base = imagePath.split(/[\\/]/).pop() ?? "";
   const safe = base.replace(/[^A-Za-z0-9._-]/g, "");
-  return `praiseloop-media-${safe || "image"}`;
+  return `${CACHE_PREFIX}${safe || "image"}`;
 }
 
 export type DraftImageLoaderOptions = {
@@ -86,7 +93,18 @@ export function createDraftImageLoader({ baseUrl = appConfig.apiBaseUrl, fs = na
     return promise;
   }
 
-  return { load, clear: () => downloads.clear() };
+  // Called when the session ends. Draft images belong to the signed-in owner, so the files go too:
+  // they must not outlive the session on a shared or handed-over phone. Best effort, never throws.
+  function clear() {
+    downloads.clear();
+    try {
+      for (const file of fs.listCached()) {
+        try { file.delete?.(); } catch { /* the OS evicts cache files anyway */ }
+      }
+    } catch { /* listing the cache failed; nothing more to do */ }
+  }
+
+  return { load, clear };
 }
 
 export const draftImageLoader = createDraftImageLoader();

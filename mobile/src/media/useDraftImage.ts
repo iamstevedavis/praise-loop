@@ -11,9 +11,11 @@ type LoadResult =
   | { key: string; status: "ready"; uri: string }
   | { key: string; status: "error" };
 
-// React Native's core Image drops the `headers` option in some Expo Go builds,
-// so the owner-protected PNG is downloaded with the bearer token first and the
-// local file URI is rendered instead.
+// The owner-protected PNG is downloaded with the bearer token first and the local
+// file URI is rendered. This is the same authenticated download the share flow uses,
+// so it does not depend on the Image component forwarding request headers (the phone's
+// header-based image requests reached the server without a token; why was not confirmed
+// on a device).
 export function useDraftImage(imagePath: string | null): { state: DraftImageState; retry: () => void } {
   const { token, handleError } = useSession();
   const [attempt, setAttempt] = useState(0);
