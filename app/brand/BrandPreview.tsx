@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { apiFetch } from "../apiFetch";
 export default function BrandPreview(props: { primary: string; secondary: string; quoteSize: string; tone: string }) {
   const [src, setSrc] = useState(""), [error, setError] = useState("");
   const { primary, secondary, quoteSize, tone } = props;
@@ -8,7 +9,7 @@ export default function BrandPreview(props: { primary: string; secondary: string
     let url = "";
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch("/api/branding/preview", { method: "POST", signal: controller.signal,
+        const response = await apiFetch("/api/branding/preview", { method: "POST", signal: controller.signal,
           headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brandTone: tone,
             brandColors: { primary, secondary, template: "quote-card-v1", quoteSize } }) });
         if (!response.ok) throw new Error("Preview unavailable. Check settings or sign in.");

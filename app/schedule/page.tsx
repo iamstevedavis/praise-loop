@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
 import PostingSlots from "./PostingSlots";
@@ -13,7 +14,7 @@ export default function SchedulePage() {
   const [approved, setApproved] = useState<Approved[]>([]);
 
   const load = useCallback(async (id: number | string, isCurrent: () => boolean = () => true) => {
-    const response = await fetch(`/api/drafts?businessId=${id}`);
+    const response = await apiFetch(`/api/drafts?businessId=${id}`);
     if (!response.ok || !isCurrent()) return;
     setApproved(((await response.json()).drafts ?? []).filter((d: Approved) => d.status === "approved"));
   }, []);

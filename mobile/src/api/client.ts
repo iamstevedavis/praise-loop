@@ -20,6 +20,11 @@ export class ApiError extends Error {
   }
 }
 
+// The one test for "the server says this session is over", shared by every screen.
+export function isSignedOut(error: unknown): boolean {
+  return error instanceof ApiError && error.kind === "signedOut";
+}
+
 export type ApiRequest = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;

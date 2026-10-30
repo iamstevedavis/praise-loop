@@ -9,7 +9,7 @@ import { Banner, Button } from "../ui/components";
 import { colors } from "../ui/theme";
 
 export default function SignInScreen() {
-  const { status, signInDemo } = useSession();
+  const { status, sessionEnded, signInDemo } = useSession();
   const [config, setConfig] = useState<MobileConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,6 +47,7 @@ export default function SignInScreen() {
         the web app for now.
       </Text>
 
+      {sessionEnded ? <Banner message="Your session ended. Sign in again." tone="warning" /> : null}
       {configError ? <Banner message={configError} tone="danger" /> : null}
       {error ? <Banner message={error} tone="danger" /> : null}
       {config === null && !configError ? <ActivityIndicator /> : null}

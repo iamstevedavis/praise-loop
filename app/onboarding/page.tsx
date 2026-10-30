@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import BrandPreview from "../brand/BrandPreview";
 import { ColorPicker, readLogo, timezones, TonePicker, type BrandTone } from "../brand/options";
@@ -31,7 +32,7 @@ export default function Onboarding() {
   const [loaded, setLoaded] = useState<Record<string, string>>({}); const key = useRef(""); const fresh = useRef(false);
 
   async function load(id?: string) {
-    const response = await fetch(`/api/onboarding${id ? `?businessId=${encodeURIComponent(id)}` : ""}`), next = await response.json();
+    const response = await apiFetch(`/api/onboarding${id ? `?businessId=${encodeURIComponent(id)}` : ""}`), next = await response.json();
     if (!response.ok) { setData(null); setMessage(response.status === 401 ? "" : next.error ?? "Unable to resume; sign in and retry"); return; }
     setData(next); if (next.business) window.history.replaceState(null, "", `/onboarding?businessId=${next.business.id}`);
   }
@@ -53,7 +54,7 @@ export default function Onboarding() {
   async function create(event: FormEvent) {
     event.preventDefault(); setBusy(true);
     try {
-      const response = await fetch("/api/businesses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, timezone: zone, brandColors: { primary, secondary }, brandTone: tone, logoUrl: logo || null, onboardingKey: key.current }) }); const body = await response.json();
+      const response = await apiFetch("/api/businesses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, timezone: zone, brandColors: { primary, secondary }, brandTone: tone, logoUrl: logo || null, onboardingKey: key.current }) }); const body = await response.json();
       if (!response.ok) { setMessage(body.error); return; }
       if (fresh.current) sessionStorage.removeItem("praise-onboarding-new-key");
       await load(body.business.id); setMessage(""); void shell.reload();
@@ -62,7 +63,7 @@ export default function Onboarding() {
   async function importCsv(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!business) return; const form = event.currentTarget; const formData = new FormData(form); formData.set("businessId", business.id); setBusy(true);
     try {
-      const response = await fetch("/api/reviews/import", { method: "POST", body: formData }), body = await response.json();
+      const response = await apiFetch("/api/reviews/import", { method: "POST", body: formData }), body = await response.json();
       if (!response.ok) { setResult(null); setMessage(body.error); return; }
       setResult(body); setMessage(""); form.reset(); await load(business.id);
     } catch { setMessage("Import connection failed; importing the same file again is safe."); } finally { setBusy(false); }
@@ -70,7 +71,7 @@ export default function Onboarding() {
   async function generate(path = "/api/quotes/select", draft?: Draft) {
     if (!business) return; setBusy(true);
     try {
-      const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft ? { draftPostId: draft.id, version: draft.version } : { businessId: business.id, limit: 3 }) }), body = await response.json();
+      const response = await apiFetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft ? { draftPostId: draft.id, version: draft.version } : { businessId: business.id, limit: 3 }) }), body = await response.json();
       if (!response.ok) setMessage(body.error ?? "We couldn’t start making posts. Try again.");
       else if (!draft && !body.inserted) setMessage(noDrafts[body.reason] ?? "We couldn’t find a review to turn into a post yet.");
       else { setMessage(""); setImporting(false); setResult(null); }

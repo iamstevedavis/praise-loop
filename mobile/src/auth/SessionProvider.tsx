@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ApiError } from "../api/client";
+import { isSignedOut } from "../api/client";
 import { sessionStore } from "./store";
 import { signInDemo as requestDemoSession, signOut as revokeSession } from "./session";
 
@@ -8,6 +8,9 @@ type SessionStatus = "loading" | "signedOut" | "signedIn";
 type SessionValue = {
   status: SessionStatus;
   token: string | null;
+  // True after the server ended the session (as opposed to the owner signing out),
+  // so the sign-in screen can say why.
+  sessionEnded: boolean;
   signInDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   // Call from a screen's catch: a 401 clears the keychain and returns the app to
@@ -22,6 +25,7 @@ const SessionContext = createContext<SessionValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [token, setToken] = useState<string | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,28 +49,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signInDemo = useCallback(async () => {
     await requestDemoSession();
     setToken(sessionStore.current());
+    setSessionEnded(false);
     setStatus("signedIn");
   }, []);
 
   const signOut = useCallback(async () => {
     await revokeSession();
     setToken(null);
+    setSessionEnded(false);
     setStatus("signedOut");
   }, []);
 
   const expire = useCallback(() => {
     void sessionStore.clear();
     setToken(null);
+    setSessionEnded(true);
     setStatus("signedOut");
   }, []);
 
   const handleError = useCallback((error: unknown) => {
-    if (error instanceof ApiError && error.kind === "signedOut") expire();
+    if (isSignedOut(error)) expire();
   }, [expire]);
 
   const value = useMemo(
-    () => ({ status, token, signInDemo, signOut, handleError, expire }),
-    [status, token, signInDemo, signOut, handleError, expire]
+    () => ({ status, token, sessionEnded, signInDemo, signOut, handleError, expire }),
+    [status, token, sessionEnded, signInDemo, signOut, handleError, expire]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

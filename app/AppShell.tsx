@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signIn, signOut } from "next-auth/react";
+import { apiFetch } from "./apiFetch";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import Icon, { type IconName } from "./ui/Icon";
 
@@ -65,7 +66,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const reload = useCallback(async () => {
     try {
-      const response = await fetch("/api/businesses");
+      const response = await apiFetch("/api/businesses");
       if (response.status === 401) { setStatus("signed-out"); return; }
       if (!response.ok) { setStatus("error"); return; }
       const list: Business[] = (await response.json()).businesses ?? [];
@@ -80,6 +81,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  // A tab left open overnight has a dead session but nothing polling it. When the owner
+  // comes back, ask once; apiFetch sends them to sign-in on a 401. Other outcomes are
+  // ignored here, and at most one check runs per half minute.
+  useEffect(() => {
+    let last = Date.now();
+    const check = () => {
+      if (document.visibilityState === "hidden" || Date.now() - last < 30000) return;
+      last = Date.now();
+      void apiFetch("/api/businesses").catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => { document.removeEventListener("visibilitychange", check); window.removeEventListener("focus", check); };
+  }, []);
 
   // Ids arrive as strings for bigint columns, so compare them as strings throughout.
   const select = useCallback((id: number | string) => {
