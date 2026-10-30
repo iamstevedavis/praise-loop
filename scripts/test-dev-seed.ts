@@ -73,9 +73,10 @@ async function main() {
       const first = await runSeed();
       const one = await snapshot(client, media);
 
-      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-free": "free" });
+      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-free": "free", "dev-owner-email": "free" });
       assert.deepEqual(one.methods.map(m => [m.owner_id, m.provider, m.email]), [
         ["dev-owner", "google", "demo@praiseloop.invalid"],
+        ["dev-owner-email", "email", "demo-email@praiseloop.invalid"],
         ["dev-owner-free", "google", "demo-free@praiseloop.invalid"]
       ], "each demo owner has a synthetic method to walk the account screen");
       assert.equal(first.businesses.length, SEED_BUSINESSES.length);
@@ -85,6 +86,8 @@ async function main() {
       assert.deepEqual(first.businesses.map(b => b.reviews), [21, 24, 17], "every CSV row is imported");
       assert.equal((await entitlementsFor("dev-owner")).plan, "pro");
       assert.equal((await entitlementsFor("dev-owner-free")).plan, "free");
+      assert.equal((await entitlementsFor("dev-owner-email")).plan, "free");
+      assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider='email' AND owner_id='dev-owner-email'")).rows[0].n, 1);
       assert.equal(one.owners.every(o => String(o.email).endsWith(".invalid")), true, "synthetic emails only");
       assert.equal(one.owners.find(o => o.id === "dev-owner-free")!.name, null, "the Free demo owner has no name for the profile empty state");
       assert.equal(one.owners.find(o => o.id === "dev-owner")!.name, "Demo Owner");

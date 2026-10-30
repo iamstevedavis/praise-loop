@@ -17,10 +17,11 @@ export function isProtectedApiPath(url: string): boolean {
 }
 
 // Only a 401 from a protected route ends the session. 403, 404, 409, 429 and 5xx
-// keep their own messages. The landing page is where the owner signs in and the
-// plans page is public, so a 401 there must never send them anywhere (no loops,
-// and a visitor can read the plans before signing in).
-const publicPages = new Set(["/", "/plans"]);
+// keep their own messages. The landing page is where the owner signs in, the plans
+// page is public and the dev email outbox is signed-out by design, so a 401 there
+// must never send them anywhere (no loops, and a visitor can read the plans before
+// signing in).
+const publicPages = new Set(["/", "/plans", "/dev/outbox"]);
 
 export function isSessionExpiry(input: { status: number; url: string; pathname: string }): boolean {
   return input.status === 401 && isProtectedApiPath(input.url) && !publicPages.has(input.pathname);

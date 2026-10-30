@@ -27,7 +27,8 @@ Owner setup (no accounts, credentials, or production config created by this PR):
    Claim accepts only an unclaimed business and an existing owner, never assigns all
    data to a registrant, and refuses reassignment. New businesses belong to the caller.
 
-Every API route except NextAuth is wrapped in the same owner guard. Business lists
+Every API route except NextAuth and the public sign-in routes in the email section below
+is wrapped in the same owner guard. Business lists
 are filtered server-side; guessed foreign business/draft/media IDs return 404. A
 composite FK rejects new cross-business review references without deleting legacy
 data; existing violations require operator reconciliation before validating that FK.
@@ -147,6 +148,49 @@ the sign-in code does automatically.
 
 `scripts/test-auth-linking.ts` covers link, reject, unlink-last and the races;
 `scripts/test-mobile-google.ts` keeps the existing Google exchange behaviour.
+
+Email one-time code (#157): the second way in, for owners whose organization does not
+use Google. No password is stored and the only requirement is that the owner can read
+the mailbox.
+
+- `POST /api/auth/email/request` (`{email}`, public) normalises the address (trim,
+  lowercase) and answers `200` with the same message whether or not an owner exists. A
+  malformed address is a `400`; missing configuration is a `503`. A per-address limit
+  (5 per 15 minutes) and a per-IP limit (20 per 15 minutes) drop excess requests without
+  telling the caller, so throttling cannot be used to probe addresses. The email
+  transport also caps 5 messages per recipient and 100 per sender per hour in each
+  process, so rotating addresses cannot turn the server into an open relay.
+- The code is 6 digits from `crypto.randomInt`, lives 10 minutes, is single use, and a
+  newer request supersedes the earlier one. Only an HMAC-SHA256 keyed with
+  `NEXTAUTH_SECRET` is stored in `email_sign_in_codes`; the real transport never logs
+  the code. Five wrong guesses consume the code. Verify failures are limited to 10 per
+  15 minutes per client IP, counted in process memory like the Google limiter.
+- `POST /api/auth/email/verify` (`{email, code}`, public, same-origin only) sets the same
+  hashed eight-hour Postgres session cookie as Google. `POST /api/mobile/session/email`
+  is the phone equivalent and returns a normal bearer session. A wrong code is a `400`
+  on both, never a `401`, because the app reads `401` as "the session ended" and would
+  clear its token over a typo.
+- Linking policy (#156): identity stays the provider plus its stable subject id. The
+  email method uses the normalised address as its subject. A verified code proves
+  control of that mailbox, so an owner already known by the same address keeps one
+  owner and gains an email method; a Google owner and their businesses are untouched.
+  A different address always gets its own owner and never attaches to someone else.
+  Because a code proves the mailbox, a reassigned address can still recover the owner
+  it was registered to: that is inherent in passwordless email and documented rather
+  than hidden.
+- Email transport (#155): `lib/email.ts` has one interface. In development and tests
+  the fake transport keeps messages in an in-memory outbox (also shown at
+  `/dev/outbox`), logs one `email_outbox` line including the code and never sends.
+  Production always uses Resend over HTTPS and fails closed unless `RESEND_API_KEY`
+  and `EMAIL_FROM` are set; `EMAIL_TRANSPORT=fake` is refused in production.
+- Owner steps before live email sign-in: create the Resend account, verify the sending
+  domain, publish SPF, DKIM and DMARC records, set `EMAIL_FROM` to an address on that
+  domain (for example `PraiseLoop <signin@example.com>`), and put the API key in the
+  runtime environment only. Real delivery was not run in the #157 PR because no account
+  or domain exists yet.
+- Development: the fake outbox is at `http://localhost:3000/dev/outbox` (development
+  process and fake transport only); the seeder also creates an email-only owner
+  (`demo-email@praiseloop.invalid`) so the flow can be walked without a mailbox.
 
 Push tokens (#88): `POST /api/mobile/push-tokens` (`{token, platform}`) registers or refreshes
 the signed-in owner's Expo push token and `DELETE` (`{token}`) removes it on sign-out; a

@@ -95,6 +95,13 @@ through the same `auth_accounts` row the web uses (`provider = google`, the
 token's `sub`), so the same person sees the same businesses on both. It returns
 a new bearer session. The server stores no Google tokens, as today.
 
+**Email sign-in from the app** (#157). The sign-in screen offers the same email
+one-time code as the web: the app requests a code, the server sends it, and a
+verified code returns a normal bearer session (`POST /api/mobile/session/email`).
+A wrong code is a 400, not a 401, so a typo never clears the app's stored token.
+The address can belong to an existing Google owner; the linking policy lives in
+`docs/auth.md`.
+
 **Sign in with Apple** (#92). App Store guideline 4.8 expects an app that
 offers Google sign-in to also offer an equivalent private option. Sign in with
 Apple is added to the app and to the web (NextAuth), so an owner who signs up on

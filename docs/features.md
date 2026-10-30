@@ -283,9 +283,10 @@ rollback can leave the plan tables in place while reverting the checks.
 `/plans` is public: a signed-out visitor sees the Free and Pro cards, what
 differs (posts each week per business, templates, watermark, review sync, AI
 replies, businesses) and a "Continue with Google" call to action. The landing
-page links to it from the header and the call to action. `AppShell` treats
-`/plans` as a bare route, like `/` and onboarding, so the signed-out sign-in
-wall does not hide it.
+page links to it from the header and the call to action, and also offers an
+"Email me a sign-in code" option (#157) for owners without Google. `AppShell`
+treats `/plans` as a bare route, like `/` and onboarding, so the signed-out
+sign-in wall does not hide it.
 
 - The comparison is worded in `lib/plansDisplay.ts` and rendered from
   `PLAN_LIMITS` in `lib/services/entitlements.ts`; the page keeps no copy of the

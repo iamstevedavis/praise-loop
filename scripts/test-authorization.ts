@@ -14,7 +14,8 @@ async function main() {
   // Exercise every actual API export anonymously, including future additions (fail closed).
   // The mobile config route is public by design (#82); the demo sign-in route answers 404
   // unless a development process enables it, so it is checked separately below.
-  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/dev/route.ts"]);
+  // Email sign-in is public by design (#157) and rate-limits instead of requiring a session.
+  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/dev/route.ts", "app/api/mobile/session/email/route.ts"]);
   for (const file of files("app/api").filter(f => !f.includes("/auth/") && !publicRoutes.has(f))) {
     const route = require(join("..",file));
     const path = "/" + file.replace(/\/route.ts$/, "").replace("[id]", "999999").replace("[name]", "draft-999999.png");

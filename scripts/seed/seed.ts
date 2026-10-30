@@ -11,7 +11,7 @@ import { assertSeedable } from "./guard";
 import { SEED_BUSINESSES, SEED_PUSH_TOKEN, type BusinessSeed, type DraftSeed, type DraftStatus } from "./fixtures";
 
 const CSV_DIR = resolve(__dirname, "..", "..", "sample-data", "csv");
-const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", free: "free" };
+const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", free: "free", email: "free" };
 const OWNER_IDS = Object.values(DEV_OWNERS).map(owner => owner.id);
 
 // Owner transitions per final status as [reason, from, to]; a failed draft has none.
