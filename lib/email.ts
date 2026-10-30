@@ -216,7 +216,8 @@ function retryAfterMs(value: string | null): number {
 // --- Configuration --------------------------------------------------------
 
 export function resolveEmailTransportName(env: NodeJS.ProcessEnv = process.env): EmailTransportName {
-  const configured = env.EMAIL_TRANSPORT?.trim().toLowerCase();
+  // Compose passes unset variables as empty strings, so blank must mean "default".
+  const configured = env.EMAIL_TRANSPORT?.trim().toLowerCase() || undefined;
   if (configured && configured !== "fake" && configured !== "resend") {
     throw unavailable("EMAIL_TRANSPORT must be `fake` or `resend`");
   }
@@ -240,13 +241,20 @@ export function getEmailTransport(env: NodeJS.ProcessEnv = process.env): EmailTr
 
 // --- Throttle -------------------------------------------------------------
 
-export type EmailThrottlePolicy = { perRecipient: number; perSender: number; windowMs: number };
+export type EmailThrottlePolicy = {
+  perRecipient: number;
+  perSender: number;
+  windowMs: number;
+  /** Bound on remembered recipients on a long-lived process (default 10,000). */
+  maxRecipientKeys?: number;
+};
 
 /** Per-process default: enough for a few sign-in attempts, not a spam cannon. */
 export const DEFAULT_EMAIL_THROTTLE: EmailThrottlePolicy = {
   perRecipient: 5,
   perSender: 100,
   windowMs: 60 * 60 * 1000,
+  maxRecipientKeys: 10_000,
 };
 
 /**
@@ -256,19 +264,22 @@ export const DEFAULT_EMAIL_THROTTLE: EmailThrottlePolicy = {
  */
 export class EmailThrottle {
   private readonly hits = new Map<string, number[]>();
+  private readonly maxRecipientKeys: number;
 
   constructor(
     private readonly policy: EmailThrottlePolicy = DEFAULT_EMAIL_THROTTLE,
     private readonly now: () => number = () => Date.now(),
-  ) {}
+  ) {
+    this.maxRecipientKeys = policy.maxRecipientKeys ?? 10_000;
+  }
 
   take(recipient: string, sender: string): void {
     const now = this.now();
     const cutoff = now - this.policy.windowMs;
     const recipientKey = `to:${recipient}`;
     const senderKey = `from:${sender}`;
-    const recipientHits = this.prune(recipientKey, cutoff);
-    const senderHits = this.prune(senderKey, cutoff);
+    const recipientHits = this.recent(recipientKey, cutoff);
+    const senderHits = this.recent(senderKey, cutoff);
     if (recipientHits.length >= this.policy.perRecipient) {
       throw new EmailError("email_throttled", "email_throttled: too many messages to this recipient", this.retryAfter(recipientHits, now));
     }
@@ -277,12 +288,33 @@ export class EmailThrottle {
     }
     recipientHits.push(now);
     senderHits.push(now);
+    this.hits.set(recipientKey, recipientHits);
+    this.hits.set(senderKey, senderHits);
+    this.evict(cutoff, recipientKey);
   }
 
-  private prune(key: string, cutoff: number): number[] {
+  /** Recent hits for a key; expired entries are removed instead of retained. */
+  private recent(key: string, cutoff: number): number[] {
     const hits = (this.hits.get(key) ?? []).filter((at) => at > cutoff);
-    this.hits.set(key, hits);
+    if (!hits.length) this.hits.delete(key);
     return hits;
+  }
+
+  /**
+   * Drop expired recipients when the map is large, then the oldest remaining
+   * recipients if still over the cap. Sender keys stay so the sender budget
+   * cannot be reset by churn in the recipient map.
+   */
+  private evict(cutoff: number, keep: string): void {
+    if (this.hits.size <= this.maxRecipientKeys + 1) return;
+    for (const [key, hits] of this.hits) {
+      if (key.startsWith("to:") && key !== keep && !hits.some((at) => at > cutoff)) this.hits.delete(key);
+    }
+    while (this.hits.size > this.maxRecipientKeys + 1) {
+      const oldest = [...this.hits.keys()].find((key) => key.startsWith("to:") && key !== keep);
+      if (!oldest) break;
+      this.hits.delete(oldest);
+    }
   }
 
   private retryAfter(hits: number[], now: number): number {
