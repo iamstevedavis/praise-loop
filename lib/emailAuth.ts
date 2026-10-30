@@ -77,6 +77,19 @@ export async function requestEmailCode(email: string, ip: string, now = Date.now
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const hash = hashCode(email, code, key);
+
+  // Send first. If the message cannot be sent (the transport's own hourly budget, a provider outage),
+  // the code that was already delivered must stay valid, so nothing in the database changes. The
+  // caller gets the same generic answer either way.
+  try {
+    await sendEmail({ to: email, ...oneTimeCodeEmail(code, { minutes: CODE_TTL_MS / 60000 }) });
+  } catch (error) {
+    // Keep only a sanitized code in the log.
+    const reason = error instanceof EmailError ? error.code : "email_send_failed";
+    console.error(JSON.stringify({ event: "email_send_failed", reason }));
+    return "sent";
+  }
+
   await transaction(async () => {
     // Serialize replacement for one address. Without this, two concurrent requests
     // could both see no active row, insert, and leave two unsuperseded codes.
@@ -90,14 +103,6 @@ export async function requestEmailCode(email: string, ip: string, now = Date.now
       [email, hash, new Date(now + CODE_TTL_MS)]
     );
   });
-
-  try {
-    await sendEmail({ to: email, ...oneTimeCodeEmail(code, { minutes: CODE_TTL_MS / 60000 }) });
-  } catch (error) {
-    // The caller gets the same generic answer either way. Keep only a sanitized code.
-    const reason = error instanceof EmailError ? error.code : "email_send_failed";
-    console.error(JSON.stringify({ event: "email_send_failed", reason }));
-  }
   return "sent";
 }
 
