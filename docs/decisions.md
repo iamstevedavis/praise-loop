@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-10-30
+  Decision: Identify an owner by provider plus stable subject, and use a verified email only as a fallback link (#156)
+  Why: One owner will have Google, email-code, Apple and Microsoft methods, and two failure modes have to be impossible: one person getting two owners, and one person inheriting another person's owner because an address moved. Therefore a returning subject always signs in as its own owner; an email can find an owner only when the provider guarantees the claim (Google today, our own code later) and the subject is not already linked to a different owner for that provider; a provider with an unverified email claim creates a separate owner. A live session can always attach another method because it already proves control of the owner, but the last method cannot be unlinked. The policy lives in `lib/authLinking.ts` and is called by both the NextAuth callback and the mobile exchange, instead of relying on NextAuth's provider-specific email linking. `auth_accounts` records the method's own email, when it was added and last used; no provider tokens are stored. No support override exists in code, and merging two owners stays an operator task.
+
 - Date: 2026-10-28
   Decision: Allow OpenRouter as the caption provider, with the model supplied only by `OPENROUTER_MODEL`
   Why: The pilot has no OpenAI or Anthropic key and wants to start on OpenRouter's free models. It speaks the OpenAI chat-completions shape, so it is a second branch inside the existing `fetch` caller with no new dependency. The model is a required setting with no default because free model ids change and a guessed id would fail in production; without it nothing is sent. OpenAI keeps priority when both keys are set, so existing deployments are unchanged. Free models are rate limited and may log prompts (reviewer quotes), so use real customer reviews only after checking the chosen model's data policy.
