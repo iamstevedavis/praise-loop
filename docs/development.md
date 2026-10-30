@@ -158,11 +158,30 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`, applies to either provider); on timeout the draft is marked `failed` with an actionable error |
 | `DRAFT_PIPELINE_INTERVAL_MS` | no | Worker sweep interval (default `60000`) |
 | `EXPO_ACCESS_TOKEN` | no | Expo push access token; only needed if enhanced push security is enabled on the Expo project |
+| `EMAIL_TRANSPORT` | no | `fake` (default outside production) or `resend`. `fake` records to an in-memory outbox and logs an `email_outbox` line, and is refused in a production process |
+| `EMAIL_FROM` | for real sends | Sender, for example `Praise Loop <no-reply@mail.example.com>`, on a domain verified in Resend. With the fake transport it defaults to `Praise Loop <no-reply@praiseloop.invalid>` |
+| `RESEND_API_KEY` | for real sends | Resend API key, supplied only through runtime secret configuration. A missing key (or `EMAIL_FROM`) fails closed with a clear `email_unavailable` error; nothing crashes at startup |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
 
 Postgres and Redis ports are bound to loopback (`127.0.0.1`) only — reachable
 from the host, not exposed to the network.
+
+### Email in development
+
+Outside production `EMAIL_TRANSPORT` defaults to `fake`, so nothing is sent and no
+key is needed. Each message is kept in the process's in-memory outbox and logged
+once as `email_outbox {json}` with its recipient, subject and body; read a sign-in
+code from that line (`docker compose logs -f web`, or the terminal running
+`npm run dev`). Tests also use the fake transport or a mocked `fetch`, so they never
+reach the network; select `resend` explicitly outside production only when trying a
+real send.
+
+For a real send, complete the owner steps in [integrations.md](integrations.md) and
+set `EMAIL_TRANSPORT=resend`, `EMAIL_FROM` (on the verified domain) and
+`RESEND_API_KEY` in `.env`, then restart web. The key is a secret: keep it out of the
+repository, logs and screenshots. Without the key or sender, email features fail
+closed with `email_unavailable`; the app still starts and serves other routes.
 
 ## Database migrations
 
