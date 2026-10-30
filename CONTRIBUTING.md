@@ -30,7 +30,8 @@
 
 When implementing an issue:
 
-1. Create a branch: `issue-<id>-<slug>`
+1. Create a worktree and branch, never in the main checkout (see AGENTS.md):
+   `git worktree add .claude/worktrees/<slug> -b issue-<id>-<slug> origin/master`
 2. Make the smallest change that satisfies acceptance criteria
 3. Update or add tests
 4. Run: lint, typecheck, tests

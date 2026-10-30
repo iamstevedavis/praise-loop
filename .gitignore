@@ -6,3 +6,6 @@ npm-debug.log*
 tsconfig.tsbuildinfo
 
 /private-media/
+
+# Agent worktrees (see AGENTS.md)
+/.claude/worktrees/

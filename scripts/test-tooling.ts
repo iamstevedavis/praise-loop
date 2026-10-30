@@ -80,4 +80,12 @@ assert.match(mobileEntry, /REACT_NATIVE_PACKAGER_HOSTNAME/, "the packager hostna
 assert.match(mobileEntry, /EXPO_PUBLIC_API_BASE_URL/, "the app must be pointed at the LAN address");
 assert.match(mobileEntry, /^set -eu$/m, "the entrypoint must fail fast");
 assert.match(read("mobile/tsconfig.json"), /\.expo\/types/, "Expo adds this include on start; keep it committed so it does not rewrite the file");
+// Agents of every kind must see the worktree rule: AGENTS.md carries it, CLAUDE.md imports it (Claude Code does
+// not read AGENTS.md on its own), and CONTRIBUTING.md's agent loop starts from a worktree, not a branch.
+const agents = read("AGENTS.md");
+assert.match(agents, /Never work in the main checkout/, "AGENTS.md must state the main-checkout rule");
+assert.match(agents, /git worktree add/, "AGENTS.md must show how to make a worktree");
+assert.match(read("CLAUDE.md"), /^@AGENTS\.md$/m, "CLAUDE.md must import AGENTS.md");
+assert.match(read("CONTRIBUTING.md"), /git worktree add/, "CONTRIBUTING.md's agent loop must start from a worktree");
+assert.match(read(".gitignore"), /^\/\.claude\/worktrees\/$/m, "agent worktrees must not show up as untracked files");
 console.log("tooling regression tests passed");

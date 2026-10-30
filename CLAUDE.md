@@ -4,6 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PraiseLoop turns customer reviews into branded social posts for local businesses behind a human approval queue. A Next.js app (UI + API routes) and a separate worker share one Postgres. An Expo phone app (`mobile/`, its own package) talks only to the API. Docs in `docs/` are the source of truth for design (`architecture.md`, `auth.md`, `features.md`, `decisions.md`, `mobile-plan.md`); update them when behavior changes.
 
+The workflow rules for every agent (work in a worktree, never in the main checkout; pull requests; review and merge) live in AGENTS.md and apply here too:
+
+@AGENTS.md
+
 ## Commands
 
 Node 22 (`.nvmrc`), npm.
