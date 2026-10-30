@@ -38,4 +38,5 @@ Suites that use `databaseFixture` (`scripts/db-fixture.ts`) **skip silently and 
 
 - Follow `CONTRIBUTING.md`: one PR per issue, no dependency upgrades unless asked, tests required, `Closes #<id>` (or `Refs #<id>` for partial work), no schema change without an issue and migration, never auto-post.
 - The `master` ruleset requires linear history and **all review threads resolved**; squash merge is disabled in repo settings, so merge with `gh pr merge --rebase`. Automated Codex review leaves threads that must be answered and resolved before merge.
+- When new code adds or changes a table, column, feature state or other sample-worthy behaviour, check whether the dev seeder (`scripts/dev-seed.ts`, `scripts/seed/`) and `sample-data/` need updating, and do it in the same PR. `scripts/test-dev-seed.ts` fails when the seeder no longer runs against the migrated schema.
 - Tests and fixtures use synthetic data only (`@example.invalid` emails); never put real reviews, tokens or keys in the repo.

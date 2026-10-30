@@ -56,10 +56,36 @@ answers 404 for the demo sign-in even if the flag is set.
    docker compose exec web npm run dev:seed
    ```
 
-   The seed creates `dev-owner` with two businesses and five rendered drafts
-   (three awaiting approval, one approved, one already shared), plus the current
-   week's generation period reserved so the worker does not add more. Re-running
-   it replaces only that owner's businesses and their images.
+   On the host (Node 22, `DATABASE_URL` from `.env` pointing at `localhost`) run
+   `npm run dev:seed` instead. It needs no OpenAI, OpenRouter or Google
+   credentials. What it creates:
+
+   | Owner | Plan | Businesses |
+   | --- | --- | --- |
+   | `dev-owner` (`demo@praiseloop.invalid`) | Pro | Copper Kettle Café (21 reviews, 7 drafts), Hespeler Powder Coating (24 reviews, 6 drafts) |
+   | `dev-owner-free` (`demo-free@praiseloop.invalid`) | Free | Harbour Bike Repair (17 reviews, 3 drafts) |
+
+   Each business has its own timezone and branding. The reviews (ratings 1 to 5
+   across several months) are loaded from `sample-data/csv/` through the same
+   import code as the app's CSV upload. Drafts cover every status: `draft`,
+   `approved`, `shared`, `archived` and `failed` (a failed generation has a quote
+   but no caption or image). Images are rendered locally, with the watermark on
+   the Free owner's. The Pro owner also gets a synthetic push token and a stub
+   Google connection on the café (no refresh token, so nothing can sync). The
+   current week's generation period is reserved so the worker does not add more.
+   The fake push token may make the worker contact Expo once; Expo rejects it and
+   the token is dropped.
+
+   The seed is idempotent. Running it again replaces only the two demo owners'
+   businesses (and everything under them, plus their images) and leaves other
+   owners alone; ids change, content does not. To reset, run it again. To remove
+   the demo data, delete those owners' businesses, or drop the dev database
+   volume. Edit `scripts/seed/fixtures.ts` and `sample-data/csv/` to change what
+   is seeded.
+
+   The seed refuses to run unless `MOBILE_DEV_AUTH=1` in a non-production
+   process and `DATABASE_URL` points at `localhost`, `127.0.0.1`, `::1`, a Unix
+   socket or the Compose service name `postgres`.
 
 3. Run the app on a phone with Expo Go. `localhost` points at the phone, so use
    the machine's LAN address:
@@ -70,9 +96,14 @@ answers 404 for the demo sign-in even if the flag is set.
    EXPO_PUBLIC_API_BASE_URL=http://192.168.1.20:3000 npm start
    ```
 
-4. Tap **Sign in as demo owner**, approve a post, then open the approved one and
-   tap **Post** to open the share sheet. The caption is copied to the clipboard;
-   answer “Did you post it?” to record `shared`.
+4. Tap **Sign in as demo owner** (the Pro owner), approve a post, then open the
+   approved one and tap **Post** to open the share sheet. The caption is copied
+   to the clipboard; answer “Did you post it?” to record `shared`.
+
+   The Free owner has no button. Get a bearer session for it with
+   `curl -X POST -H 'Content-Type: application/json' -d '{"owner":"free"}' http://localhost:3000/api/mobile/session/dev`
+   and send the returned token as `Authorization: Bearer <token>` to the API.
+   The same flag and production guard apply as for the Pro owner.
 
 The demo owner is an ordinary `auth_users` row, so ownership checks, version
 conflicts and audit events behave exactly as they do for a real owner. Never set

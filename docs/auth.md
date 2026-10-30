@@ -103,7 +103,8 @@ recorded in `push_deliveries` so restarts never resend. Tokens Expo reports as
 Demo sign-in (development only): `POST /api/mobile/session/dev` mints a normal
 bearer session for the fixed `dev-owner` row, with no Google token. It exists only
 when `MOBILE_DEV_AUTH=1` **and** the process is not a production build; otherwise it
-returns 404 exactly like an unknown route. `npm run dev:seed` creates the owner and
-synthetic drafts. The demo owner has the same ownership checks, version conflicts and
+returns 404 exactly like an unknown route. `npm run dev:seed` creates the owners and
+synthetic drafts; a body of `{"owner":"free"}` signs in as the seeded Free owner
+instead of the default Pro one. The demo owner has the same ownership checks, version conflicts and
 audit events as a real owner, so the flow is realistic; never enable the flag on a
 shared server. Production sign-in remains the Google exchange above.

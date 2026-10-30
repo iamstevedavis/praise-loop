@@ -39,6 +39,15 @@ async function main() {
       const resolved = await resolveMobileSession(body.token!);
       assert.equal(resolved?.ownerId, DEV_OWNER_ID, "the token resolves to the demo owner");
 
+      // The seeded Free owner is selectable by name; anything else is rejected.
+      const asFree = (owner: unknown) => POST(new Request("http://localhost/api/mobile/session/dev", { method: "POST", body: JSON.stringify({ owner }) }));
+      const free = await asFree("free");
+      assert.equal(free.status, 200);
+      const freeBody = await free.json() as { token: string; owner: string };
+      assert.equal(freeBody.owner, "dev-owner-free");
+      assert.equal((await resolveMobileSession(freeBody.token))?.ownerId, "dev-owner-free");
+      for (const bad of ["admin", "constructor", 1, null]) assert.equal((await asFree(bad)).status, 400, String(bad));
+
       // The demo owner is scoped like any other: another owner never sees its data.
       const business = (await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Demo café','UTC',$1) RETURNING id", [DEV_OWNER_ID])).rows[0].id;
       await client.query("INSERT INTO auth_users(id,email) VALUES('other-owner','other@example.invalid') ON CONFLICT DO NOTHING");
