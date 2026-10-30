@@ -5,6 +5,8 @@ import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import BrandPreview from "./BrandPreview";
 import { ColorPicker, readLogo, timezones, TonePicker, type BrandTone } from "./options";
+import { usePlan } from "../ui/usePlan";
+import { planName } from "../../lib/planDisplay";
 
 export default function BrandPage() {
   const { business, status, reload } = useBusiness();
@@ -13,6 +15,7 @@ export default function BrandPage() {
   const [tone, setTone] = useState<BrandTone>("friendly"), [quoteSize, setQuoteSize] = useState<"standard" | "large">("standard");
   const [logo, setLogo] = useState(""), [weeklyTarget, setWeeklyTarget] = useState(3);
   const [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
+  const { plan } = usePlan();
 
   useEffect(() => {
     if (!business) return;
@@ -110,7 +113,11 @@ export default function BrandPage() {
 
           <label className="pl-field" style={{ maxWidth: 240 }}>Posts per week
             <input className="pl-input" type="number" min={1} max={5} value={weeklyTarget} onChange={e => setWeeklyTarget(Number(e.target.value))} />
-            <span className="pl-small pl-muted" style={{ fontWeight: 400 }}>Takes effect next week.</span>
+            <span className="pl-small pl-muted" style={{ fontWeight: 400 }}>
+              Takes effect next week.
+              {plan ? ` Your ${planName(plan.plan)} plan allows up to ${plan.limits.postsPerWeek} a week${weeklyTarget > plan.limits.postsPerWeek ? `, so ${plan.limits.postsPerWeek} will be made` : ""}.` : ""}
+              {plan ? <> <Link href="/account">See your plan</Link></> : null}
+            </span>
           </label>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", paddingTop: 14, borderTop: "1px solid var(--pl-line-soft)" }}>

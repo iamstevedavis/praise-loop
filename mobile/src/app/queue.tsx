@@ -6,8 +6,10 @@ import { api } from "../api";
 import { ApiError } from "../api/client";
 import { listBusinesses, type Business } from "../api/businesses";
 import { fetchGeneration, listDrafts, type Draft, type GenerationSnapshot } from "../api/drafts";
+import { fetchEntitlements, type Entitlements } from "../api/entitlements";
 import { absoluteMediaUrl } from "../posting/media";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
+import { expiryNote, planLines, quotaMetMessage, usageFor } from "../queue/planSummary";
 import { useSession } from "../auth/SessionProvider";
 import { appConfig } from "../config";
 import { Banner, Chip, Section } from "../ui/components";
@@ -57,6 +59,8 @@ export default function QueueScreen() {
   const [queue, setQueue] = useState<{ businessId: number; drafts: Draft[]; generation: GenerationSnapshot } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  // Best effort and read-only: a failed plan request must not hide the queue.
+  const [plan, setPlan] = useState<Entitlements | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // Refresh has no effect cleanup of its own, so it checks the selection again
   // after awaiting and drops a response for a business the owner left.
@@ -66,7 +70,7 @@ export default function QueueScreen() {
 
   // Fetchers stay pure so the effects below only set state after an await.
   const fetchBusinesses = useCallback(() => listBusinesses(api), []);
-  const fetchQueue = useCallback((id: number) => Promise.all([listDrafts(api, id), fetchGeneration(api, id)]), []);
+  const fetchQueue = useCallback((id: number) => Promise.all([listDrafts(api, id), fetchGeneration(api, id), fetchEntitlements(api).catch(() => null)]), []);
 
   const applyBusinesses = useCallback((list: Business[]) => {
     setBusinesses(list);
@@ -97,9 +101,10 @@ export default function QueueScreen() {
     let cancelled = false;
     void (async () => {
       try {
-        const [drafts, generation] = await fetchQueue(businessId);
+        const [drafts, generation, entitlements] = await fetchQueue(businessId);
         if (cancelled) return;
         setQueue({ businessId, drafts, generation });
+        setPlan(entitlements);
         setOffline(false);
         setError(null);
       } catch (cause) {
@@ -121,11 +126,12 @@ export default function QueueScreen() {
     try {
       if (businessId) {
         const selected = businessId;
-        const [drafts, generation] = await fetchQueue(selected);
+        const [drafts, generation, entitlements] = await fetchQueue(selected);
         // The owner may have switched businesses while this was in flight; their
         // newer load must win, or the check below would leave them on a spinner.
         if (businessIdRef.current !== selected) return;
         setQueue({ businessId: selected, drafts, generation });
+        setPlan(entitlements);
         setOffline(false);
         setError(null);
       } else {
@@ -147,6 +153,8 @@ export default function QueueScreen() {
   const loaded = queue && queue.businessId === businessId ? queue : null;
   const view = loaded ? buildQueue(loaded.drafts, loaded.generation) : null;
   const generating = view ? isGenerating(view) : false;
+  const usage = usageFor(plan, businessId);
+  const limitMessage = plan && usage ? quotaMetMessage(plan, usage) : null;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -205,7 +213,9 @@ export default function QueueScreen() {
               ) : null}
             </View>
 
-            {queueEmptyMessage(view) && view.readyCount === 0 ? (
+            {limitMessage && plan && usage ? <Banner message={`${limitMessage} New posts start ${usage.resetsOn}.${expiryNote(plan) ? ` ${expiryNote(plan)}` : ""}`} tone="warning" /> : null}
+
+            {queueEmptyMessage(view) && view.readyCount === 0 && !limitMessage ? (
               <Banner message={queueEmptyMessage(view)} />
             ) : null}
 
@@ -247,6 +257,12 @@ export default function QueueScreen() {
               </Section>
             ) : null}
           </>
+        ) : null}
+
+        {plan ? (
+          <Section title="Your plan" hint="Plans are changed on the web app.">
+            {planLines(plan, usage).map(line => <Text key={line} style={styles.caption}>{line}</Text>)}
+          </Section>
         ) : null}
       </ScrollView>
     </SafeAreaView>

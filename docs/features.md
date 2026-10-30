@@ -235,7 +235,34 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
   the original business, so a retried onboarding request cannot be blocked or
   duplicated.
 - `GET /api/entitlements` is owner-authenticated, read-only and returns the
-  effective plan and limits. No route lets an owner change their own plan.
+  effective plan and limits, plus `usage`: one entry per owned business with this
+  week's allocated drafts against the effective cap (the owner's weekly target
+  limited by the plan), whether the quota is met, and when the week resets
+  (`resetsOn` is the next Monday in the business's timezone, `resetsAt` that
+  instant). Usage reads `generation_periods` and `generationWeek`, so it never
+  disagrees with what the generator enforces. No route lets an owner change
+  their own plan.
+
+### Plan page and limit messages (#133)
+
+Plans are visible but read-only: no upgrade button and no prices (pricing is
+decided after the pilot; see `docs/mobile-plan.md`).
+
+- **Plan page** (`/account`, "Plan" in the nav): the plan, where it came from
+  (default, manual or store), its expiry, what it includes (posts per week,
+  templates, watermark, review sync, AI replies, businesses) and per-business
+  usage such as "1 of 1 post this week" with the reset date.
+- **Expired Pro** reads as Free with a note saying when Pro expired.
+- **This Week** says "You've reached this week's limit" and names the plan
+  limit, instead of "All caught up", when the weekly quota is used up. It
+  distinguishes a plan-capped target from a quota the owner set themselves.
+- **Brand settings** shows the plan's weekly allowance beside "Posts per week",
+  and says how many will be made when the target is higher.
+- **Phone app**: the queue screen shows the same limit message and a read-only
+  "Your plan" section from the same endpoint. Wording lives in
+  `lib/planDisplay.ts` (web) and `mobile/src/queue/planSummary.ts` (phone) and
+  both are covered by tests.
+- Onboarding does not yet mention the limit; that is a follow-up.
 
 Expired Pro falls back to Free at read time without deleting the stored plan, so
 a renewal restores Pro. Operators set plans with:

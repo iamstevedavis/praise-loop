@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
+import { usePlan } from "../ui/usePlan";
+import { expiryNote, formatLocalDate, quotaMetMessage } from "../../lib/planDisplay";
 import PostCard, { stageOf, type Draft, type Stage } from "./PostCard";
 
 const conflict = "This post changed somewhere else. We loaded the latest version — try again.";
@@ -23,6 +25,7 @@ export default function ThisWeekPage() {
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const { plan } = usePlan();
 
   const load = useCallback(async (id: number | string) => {
     const res = await apiFetch(`/api/drafts?businessId=${id}`);
@@ -107,6 +110,12 @@ export default function ThisWeekPage() {
     : pending ? "Your posts are on the way"
     : groups.approved.length ? "You’re set for this week"
     : "Nothing to review yet";
+  // The server owns the limits; when this week's quota is used up, name the plan limit.
+  const usage = plan?.usage.find(u => String(u.businessId) === String(business.id));
+  const limitMessage = plan && usage ? quotaMetMessage(plan, usage) : null;
+  const limitNote = plan && usage && limitMessage
+    ? `${limitMessage} New posts start ${formatLocalDate(usage.resetsOn)}.${expiryNote(plan) ? ` ${expiryNote(plan)}` : ""}`
+    : null;
 
   return (
     <>
@@ -124,6 +133,8 @@ export default function ThisWeekPage() {
       </header>
 
       <p role="status" className="pl-toast">{message}</p>
+
+      {limitNote && active.length ? <p className="pl-small pl-muted" style={{ margin: 0 }}>{limitNote} <Link href="/account">See your plan</Link></p> : null}
 
       <div className="pl-banner">
         <Icon name="plug" size={22} />
@@ -143,8 +154,9 @@ export default function ThisWeekPage() {
         </div>
       ) : (
         <div className="pl-empty done">
-          <h2>You’re all caught up</h2>
-          <p>Everything is approved, scheduled or shared. New posts arrive next week.</p>
+          <h2>{limitNote ? "You’ve reached this week’s limit" : "You’re all caught up"}</h2>
+          <p>{limitNote ?? "Everything is approved, scheduled or shared. New posts arrive next week."}</p>
+          {limitNote ? <p><Link href="/account">See your plan</Link></p> : null}
         </div>
       )}
 
