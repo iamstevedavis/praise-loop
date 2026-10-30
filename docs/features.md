@@ -249,7 +249,7 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
 Plans are visible but read-only: no upgrade button and no prices (pricing is
 decided after the pilot; see `docs/mobile-plan.md`).
 
-- **Plan page** (`/account`, "Plan" in the nav): the plan, where it came from
+- **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
   (default, manual or store), its expiry, what it includes (posts per week,
   templates, watermark, review sync, AI replies, businesses) and per-business
   usage such as "1 of 1 post this week" with the reset date.
@@ -330,3 +330,32 @@ profile screen (#151), so the two cannot disagree.
   sign-in-after-edit case and the read-only email.
 - Avatars show initials for now; keeping Google's profile picture is a later
   decision (see `docs/decisions.md`).
+
+## Profile menu (#150)
+
+The web app keeps who the owner is and what they are on under one profile button
+instead of spreading account things through the nav and the business switcher.
+
+- The profile button sits at the bottom of the sidebar and in the phone top bar.
+  It shows the owner's initials and their name where there is room. Its menu has
+  a name/email header, **Plan and usage** (the full `/account` page), **Edit
+  name** (inline) and **Sign out**, which deletes the server session.
+- A missing name shows an unobtrusive "Add your name" prompt in the menu and on
+  the profile page, never a blank or the raw email. The email is shown read-only.
+- `/account` is now the full profile and plan page: name, read-only email, inline
+  name editing, then the existing plan, limits and weekly usage sections. Editing
+  the name updates the menu and the page through shared state, with no reload.
+- "Plan" is no longer a top-level nav item, so the tab bar is back to the four
+  work screens and the five-item layout from #141 is gone. Sign out is only in the
+  profile menu; it was removed from the sidebar and the phone business dropdown.
+- At phone width the profile button is in the top bar and its menu is anchored to
+  it, inside the viewport and above the tab bar. It is a real button with an
+  accessible name; Escape and an outside click dismiss the menu, and Escape
+  returns focus to the button.
+- Wording and the menu items live in `lib/profileDisplay.ts` (pure and
+  client-safe), covered by `scripts/test-profile-display.ts`. The browser
+  walkthrough (open, edit the name, reach the plan page, sign out, phone width) is
+  `scripts/test-profile-browser.ts`.
+- The demo seeder's Pro owner is named and its Free owner has no name, so both
+  states can be walked with `npm run dev:seed`.
+
