@@ -19,7 +19,19 @@ async function main() {
     const star = await sharp(bytes).extract({ left: 102, top: 104, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
     assert.deepEqual([...star], [0x9a, 0x5a, 0x0b], "rating stars appear top left");
     const reviewer = await sharp(bytes).extract({ left: 80, top: 860, width: 700, height: 140 }).stats();
-    assert.ok(reviewer.channels[0].min < 50, "reviewer and business names are drawn bottom left");
+    assert.ok(reviewer.channels[0].min < 50, "the reviewer's name is drawn bottom left as the signature");
+    const header = await sharp(bytes).extract({ left: 420, top: 80, width: 580, height: 60 }).stats();
+    assert.ok(header.channels[0].min < 50, "the business name is drawn top right as a brand header");
+    // The signature is the reviewer alone: no author means an empty signature area, never the business name.
+    const unsigned = readFileSync((await renderDraftImage({ ...base, draftPostId: 906, authorName: null, quoteText: "A short synthetic quote" })).fileSystemPath);
+    const signatureArea = await sharp(unsigned).extract({ left: 80, top: 880, width: 700, height: 120 }).removeAlpha().raw().toBuffer();
+    assert.ok(signatureArea.every(value => value === 255), "a review without a reviewer name has no signature");
+    const unsignedHeader = await sharp(unsigned).extract({ left: 420, top: 80, width: 580, height: 60 }).stats();
+    assert.ok(unsignedHeader.channels[0].min < 50, "the business name still appears as the header");
+    // The header sits level with the stars, and the quote never starts under it.
+    const longName = readFileSync((await renderDraftImage({ ...base, draftPostId: 907, rating: null, businessName: "Synthetic Café & Bakery of the Greater Synthetic Region", quoteText: "A short synthetic quote" })).fileSystemPath);
+    const headerGap = await sharp(longName).extract({ left: 80, top: 140, width: 920, height: 20 }).removeAlpha().raw().toBuffer();
+    assert.ok(headerGap.every(value => value === 255), "the header does not run into the quote area");
     const region = await sharp(bytes).extract({ left: 80, top: 300, width: 920, height: 650 }).stats();
     assert.ok(region.channels[0].min < 50, "real text backend draws visible quote glyphs");
     assert.equal(foreground("#ffffff"), "#000000"); assert.equal(foreground("#000000"), "#ffffff");
