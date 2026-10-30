@@ -1,6 +1,105 @@
 # Integrations
 
-Feasibility gates, dated official references and owner setup for third-party providers. Neither integration is live yet.
+Feasibility gates, dated official references and owner setup for third-party providers. None of these integrations is live yet.
+
+## Transactional email (#155) — checked 2026-10-30
+
+Status: the transport and its tests exist, but **no live send has been run**: there is
+no owner Resend account or API key in this session. #155 stays open and #152's email
+issues stay blocked until the owner actions below are done and one test message is
+recorded. Tests and the dev stack never send.
+
+### Chosen provider and comparison
+
+Resend, through its HTTP send API (`POST https://api.resend.com/emails`) with a
+plain-text body and an optional `Idempotency-Key`. Resend was compared with the
+alternatives on 2026-10-30:
+
+| Option | Free tier | Paid entry | Domain and authentication | Why not chosen |
+| --- | --- | --- | --- | --- |
+| [Resend](https://resend.com/pricing) | 3,000/month, 100/day, 3 domains | $20/month for 50,000 | Verified own domain, SPF/DKIM/DMARC, automatic hard-bounce suppression, webhooks | **Chosen**: smallest setup, free tier covers the pilot, plain `text` field, no SDK needed |
+| [Postmark](https://postmarkapp.com/pricing) | 100/month | $15/month for 10,000 | Verified domain, DKIM/SPF/DMARC, suppression, strong deliverability reputation | 100 free messages is too small once codes are re-sent; double the entry price |
+| [Amazon SES](https://aws.amazon.com/ses/pricing/) | No standing free allowance assumed | $0.16 per 1,000 (Essentials) | Own domain, DKIM/SPF/DMARC, reputation dashboards | Needs AWS account, IAM policy and production-access approval before arbitrary recipients |
+| [Cloudflare Email Service](https://developers.cloudflare.com/email-service/platform/pricing/) | Sending needs Workers Paid | 3,000/month included, then $0.35 per 1,000 | Own domain, DKIM/SPF/DMARC, API token | Sending is beta; the Tunnel does not remove the account/token work |
+| Plain SMTP to a mailbox provider | Depends on provider | Depends on provider | Provider-specific | Rejected: adds credential/connection management without removing the provider; every option above offers SMTP if needed |
+
+All options need a real domain the owner controls ([#90](https://github.com/iamstevedavis/praise-loop/issues/90)).
+Resend will not send from its shared domain to arbitrary recipients: a verified
+domain is required, and the shared sender only reaches the account owner's own
+address. That owner address is enough for the first live test, but not for pilot
+owners.
+
+### Verified official interfaces and references
+
+Fetched 2026-10-30:
+
+- [Send email](https://resend.com/docs/api-reference/emails/send-email): `from`,
+  one or more `to`, `subject`, and `text`; `Idempotency-Key` deduplicates for 24
+  hours and is at most 256 characters. We send one bare recipient and plain text.
+- [Verified domains](https://resend.com/docs/dashboard/domains/introduction): sending
+  requires a domain you own; Resend recommends a subdomain (for example
+  `mail.example.com`) so transactional reputation is separate from other mail.
+- [Cloudflare DNS setup](https://resend.com/docs/dashboard/domains/cloudflare): DKIM
+  TXT (`resend._domainkey...`), SPF TXT and MX on the `send` subdomain, all
+  **DNS only** (never proxied); verification often takes minutes and can take up to
+  72 hours.
+- [DMARC](https://resend.com/docs/dashboard/domains/dmarc): start with
+  `v=DMARC1; p=none; rua=mailto:...`, confirm `spf=pass dkim=pass dmarc=pass` on real
+  messages, then tighten to `quarantine` and `reject`. A verified Resend domain
+  already passes SPF and DKIM.
+- [Pricing](https://resend.com/pricing): the free plan includes 100 messages/day and
+  hard-bounce suppression; webhook endpoints are included for delivery/bounce/
+  complaint events. Only a sanitized message id is logged by the real transport.
+
+### Implementation (real transport exists, unverified live)
+
+`lib/email.ts` defines `EmailTransport` with two implementations:
+
+- `fake` (default outside production): appends to an in-memory outbox and writes one
+  `email_outbox {...}` log line containing the recipient, subject and body, so a
+  developer can read the one-time code in the dev stack. It never calls the network
+  and is refused in a production process.
+- `resend`: a timeout-bounded `fetch` call. It sends `text` only (no HTML, images,
+  tracking pixels or review content), never logs the API key, message body or
+  recipient, and maps errors to sanitized codes (`email_auth`, `email_invalid`,
+  `email_throttled`, `email_provider`, `email_timeout`). A missing `EMAIL_FROM` or
+  `RESEND_API_KEY` fails closed with `email_unavailable` and a clear message.
+
+`sendEmail()` throttles per recipient (5/hour) and per sender (100/hour) with a
+sliding window before handing the message to the transport. The throttle is
+**process-local**: web and worker each get their own budget; replace it with a shared
+store if more than one sending process is added. Errors never include the recipient,
+and callers must answer sign-in attempts identically whether or not an address has an
+account.
+
+`scripts/test-email.ts` covers the fake outbox and its log, the plain-text template,
+both throttle dimensions and window recovery, invalid recipients/subjects and header
+injection, the missing-configuration paths, and the Resend contract against a mocked
+`fetch` (success plus 401/403/422/429/5xx/timeout). No test or dev run touches the
+network.
+
+### Owner actions to unblock and deliverability checklist
+
+1. Settle the sending domain from #90 and choose a transactional subdomain, for
+   example `mail.praise.example.com`. Do not use the root domain if it also has
+   human mailboxes.
+2. Create the Resend account (owner owns billing and keys) and add that subdomain.
+   Put the API key only in runtime secret configuration, never in `.env.example`,
+   the repository or logs.
+3. In Cloudflare DNS add exactly the records Resend shows: DKIM TXT, SPF TXT and MX
+   on the `send` subdomain, all **DNS only**. Click verify in Resend.
+4. Add `_dmarc.mail.praise.example.com` with `v=DMARC1; p=none; rua=mailto:<owner
+   address>;`. Send a test message, inspect the headers for `spf=pass`,
+   `dkim=pass` and `dmarc=pass`, then tighten the policy to `quarantine` and later
+   `reject`.
+5. Set `EMAIL_TRANSPORT=resend`, `EMAIL_FROM="Praise Loop <no-reply@mail.praise.example.com>"`
+   and `RESEND_API_KEY` on the web service (and the worker if it will send), restart,
+   and send one message to a test address the owner controls. Record the date and
+   sanitized Resend message id here. Until that is done, #152's email issues stay
+   blocked.
+6. Enable a complaint (and bounce) webhook before wider use and decide how to record
+   suppression outside the repo. Keep provider responses, recipients and codes out of
+   logs and never reveal whether an address has an account.
 
 ## Buffer feasibility gate (#29) — checked 2026-10-15
 
