@@ -6,7 +6,6 @@ import { refreshPushRegistration } from "./controller";
 import { notificationTargetFromResponse, planNotificationRoute } from "./links";
 import { loadNotifications } from "./native";
 import { holdNotificationTarget, takePendingNotificationTarget } from "./pending";
-import { notificationStore } from "./store";
 
 // Lives inside SessionProvider. It listens for a tapped notification, remembers
 // a target that arrives before sign-in, and refreshes the device token on every
@@ -67,8 +66,8 @@ export function NotificationRouter() {
       const action = planNotificationRoute(pending, true);
       if (!cancelled && action.kind === "navigate") router.push(action.href);
 
-      const choice = await notificationStore.load().catch(() => null);
-      if (!cancelled && choice === "on") await refreshPushRegistration(api);
+      // Also retries an unregister that failed earlier, whatever the current choice is.
+      if (!cancelled) await refreshPushRegistration(api);
     })();
     return () => { cancelled = true; };
   }, [router, status]);

@@ -53,15 +53,27 @@ export async function permissionStatus(): Promise<NotificationPermission> {
   return permissionFromStatus(await module.getPermissionsAsync());
 }
 
+// Android 8+ needs a channel before notifications can be shown, and Android 13+ needs one before the
+// permission prompt and before a push token is fetched. Creating it again is harmless.
+async function ensureAndroidChannel(module: NotificationsModule): Promise<void> {
+  if (Platform.OS !== "android") return;
+  await module.setNotificationChannelAsync("default", {
+    name: "Posts ready",
+    importance: module.AndroidImportance.DEFAULT
+  });
+}
+
 export async function requestPermission(): Promise<NotificationPermission> {
   const module = loadNotifications();
   if (!module) return "denied";
+  await ensureAndroidChannel(module);
   return permissionFromStatus(await module.requestPermissionsAsync());
 }
 
 export async function expoPushToken(projectId: string): Promise<string> {
   const module = loadNotifications();
   if (!module) throw new Error("Notifications are not available in this build.");
+  await ensureAndroidChannel(module);
   const token = await module.getExpoPushTokenAsync({ projectId });
   if (typeof token.data !== "string" || token.data.length === 0) {
     throw new Error("Expo did not return a push token.");

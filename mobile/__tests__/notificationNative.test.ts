@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import {
   cachedPushToken,
   expoPushToken,
@@ -11,6 +12,7 @@ import {
 const mockPermissions = jest.fn();
 const mockRequest = jest.fn();
 const mockToken = jest.fn();
+const mockChannel = jest.fn();
 
 jest.mock("expo-constants", () => ({
   __esModule: true,
@@ -31,7 +33,9 @@ jest.mock("expo-notifications", () => ({
   __esModule: true,
   getPermissionsAsync: (...args: unknown[]) => mockPermissions(...args),
   requestPermissionsAsync: (...args: unknown[]) => mockRequest(...args),
-  getExpoPushTokenAsync: (...args: unknown[]) => mockToken(...args)
+  getExpoPushTokenAsync: (...args: unknown[]) => mockToken(...args),
+  setNotificationChannelAsync: (...args: unknown[]) => mockChannel(...args),
+  AndroidImportance: { DEFAULT: 3 }
 }));
 
 
@@ -40,6 +44,7 @@ describe("native push module", () => {
     mockPermissions.mockReset();
     mockRequest.mockReset();
     mockToken.mockReset();
+    mockChannel.mockReset();
     forgetPushToken();
   });
 
@@ -79,5 +84,28 @@ describe("native push module", () => {
     mockToken.mockResolvedValue({ type: "expo", data: null });
     await expect(expoPushToken("project-1")).rejects.toThrow(/push token/i);
     expect(cachedPushToken()).toBeNull();
+  });
+
+  it("creates the Android channel before the permission prompt and before the token, not on iOS", async () => {
+    mockRequest.mockResolvedValue({ granted: true, status: "granted" });
+    mockToken.mockResolvedValue({ type: "expo", data: "ExponentPushToken[abcdefgh1234]" });
+
+    await requestPermission();
+    await expoPushToken("project-1");
+    expect(mockChannel).not.toHaveBeenCalled();
+
+    const restore = jest.replaceProperty(Platform, "OS", "android");
+    try {
+      const order: string[] = [];
+      mockChannel.mockImplementation(async () => { order.push("channel"); });
+      mockRequest.mockImplementation(async () => { order.push("permission"); return { granted: true, status: "granted" }; });
+      mockToken.mockImplementation(async () => { order.push("token"); return { type: "expo", data: "ExponentPushToken[abcdefgh1234]" }; });
+      await requestPermission();
+      await expoPushToken("project-1");
+      expect(order).toEqual(["channel", "permission", "channel", "token"]);
+      expect(mockChannel).toHaveBeenCalledWith("default", expect.objectContaining({ importance: 3 }));
+    } finally {
+      restore.restore();
+    }
   });
 });
