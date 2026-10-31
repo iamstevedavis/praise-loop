@@ -18,6 +18,7 @@ import {
   deletionErrorMessage
 } from "../profile/accountDeletion";
 import { canUnlinkMethod, displayName, initials, methodAdded, methodName, nameActionLabel, nameProblem } from "../profile/identity";
+import { NotificationSettings } from "../notifications/NotificationSettings";
 import { planLines, planUsageLines } from "../queue/planSummary";
 import { Avatar, Banner, Button, Chip, Section } from "../ui/components";
 import { colors } from "../ui/theme";
@@ -396,12 +397,7 @@ export default function ProfileScreen() {
           )}
         </Section>
 
-        <Section title="Notifications">
-          <View style={styles.row}>
-            <Text style={styles.body}>New posts ready to review</Text>
-            <Chip label="Coming soon" />
-          </View>
-        </Section>
+        <NotificationSettings />
 
         <Section title="This app">
           <Text style={styles.body}>Version {appConfig.version} ({appConfig.variant})</Text>

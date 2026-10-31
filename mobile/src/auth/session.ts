@@ -1,6 +1,7 @@
 import { api } from "../api";
 import { sessionStore } from "./store";
 import { signInWithEmailCode } from "./email";
+import { unregisterPushDevice } from "../notifications/controller";
 import type { DemoOwnerKey } from "./demoOwners";
 
 // Demo sign-in. The route only exists on a development server started with
@@ -34,8 +35,10 @@ export async function signInWithGoogleToken(idToken: string): Promise<void> {
 }
 
 // Revoking is best-effort: the local token is cleared even when the server is
-// unreachable, so the next launch starts signed out.
+// unreachable, so the next launch starts signed out. The push token is removed
+// first, while the session that owns it is still valid.
 export async function signOut(): Promise<void> {
+  await unregisterPushDevice(api);
   try {
     await api.request("/api/mobile/session/revoke", { method: "POST" });
   } catch {

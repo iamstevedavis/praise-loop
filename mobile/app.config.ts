@@ -21,6 +21,10 @@ const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "";
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? "";
 const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME ?? "";
 
+// Public EAS project id used to fetch Expo push tokens (#89). It is not a secret;
+// leaving it empty keeps push unavailable instead of failing at launch.
+const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? "";
+
 // The plugin needs the URL scheme at prebuild, so only add it when it is set;
 // otherwise `expo start` and `expo config` still work without Google setup.
 const googlePlugins: NonNullable<ExpoConfig["plugins"]> = googleIosUrlScheme
@@ -59,7 +63,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#123456"
     }
   },
-  plugins: ["expo-router", mediaLibraryPlugin, ...googlePlugins],
+  plugins: ["expo-router", mediaLibraryPlugin, "expo-notifications", ...googlePlugins],
   experiments: {
     typedRoutes: true
   },
@@ -67,6 +71,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     apiBaseUrl,
     googleWebClientId,
     googleIosClientId,
-    appVariant: variant
+    appVariant: variant,
+    ...(easProjectId ? { eas: { projectId: easProjectId } } : {})
   }
 });

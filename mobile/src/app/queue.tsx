@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Redirect, router, useFocusEffect } from "expo-router";
+import { Redirect, router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Linking from "expo-linking";
 import { api } from "../api";
 import { ApiError, bestEffort } from "../api/client";
@@ -10,6 +10,8 @@ import { fetchGeneration, listDrafts, type Draft, type GenerationSnapshot } from
 import { fetchEntitlements, type Entitlements } from "../api/entitlements";
 import { fetchProfile, type Profile } from "../api/profile";
 import { initials } from "../profile/identity";
+import { NotificationOffer } from "../notifications/NotificationOffer";
+import { parseBusinessId } from "../notifications/links";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
 import { expiryNote, quotaMetMessage, usageFor } from "../queue/planSummary";
 import { noBusinessView } from "../queue/onboarding";
@@ -75,6 +77,11 @@ export default function QueueScreen() {
 
   useEffect(() => { businessIdRef.current = businessId; }, [businessId]);
 
+  // A notification deep-links to /queue?businessId=...; the owned list decides
+  // whether that id is selectable, so another owner's id falls back to the first.
+  const params = useLocalSearchParams<{ businessId?: string }>();
+  const linkedBusinessId = parseBusinessId(params.businessId);
+
   // Fetchers stay pure so the effects below only set state after an await.
   const fetchBusinesses = useCallback(() => listBusinesses(api), []);
   const fetchQueue = useCallback((id: number) => Promise.all([
@@ -102,9 +109,10 @@ export default function QueueScreen() {
 
   const applyBusinesses = useCallback((list: Business[]) => {
     setBusinesses(list);
-    setBusinessId(current => current ?? list[0]?.id ?? null);
+    const linked = linkedBusinessId && list.some(item => item.id === linkedBusinessId) ? linkedBusinessId : null;
+    setBusinessId(current => linked ?? current ?? list[0]?.id ?? null);
     setError(null);
-  }, []);
+  }, [linkedBusinessId]);
 
   useEffect(() => {
     if (status !== "signedIn") return;
@@ -225,6 +233,8 @@ export default function QueueScreen() {
             ))}
           </ScrollView>
         ) : null}
+
+        <NotificationOffer />
 
         {noBusiness ? (
           <View style={styles.noBusiness}>

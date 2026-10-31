@@ -59,7 +59,8 @@ QR code (or enter the URL under "Enter URL manually"), then see the demo flow be
   firewalld, allow them for your network (for example `sudo firewall-cmd --add-port=8081/tcp
   --add-port=3000/tcp`, which lasts until reboot).
 - Expo Go covers the demo flow. Native Google sign-in and push notifications need a
-  development build (#85, #89).
+  development build (#85, #89); push also needs the EAS project id and APNs/FCM
+  credentials listed in `mobile/README.md#push-notifications`.
 
 ## Demo flow with synthetic data
 
