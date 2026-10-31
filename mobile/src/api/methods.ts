@@ -7,6 +7,10 @@ export type AuthMethod = {
   lastUsedAt: string | null;
 };
 
+// The same labels the web uses; an unknown provider falls back to its raw id.
+export const providerNames: Record<string, string> = { google: "Google", apple: "Apple" };
+export const providerName = (provider: string) => providerNames[provider] ?? provider;
+
 function timestamp(value: unknown) {
   return value === null || (typeof value === "string" && !Number.isNaN(Date.parse(value)));
 }

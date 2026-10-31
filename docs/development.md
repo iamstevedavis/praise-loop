@@ -58,9 +58,11 @@ QR code (or enter the URL under "Enter URL manually"), then see the demo flow be
 - A firewall may block the phone from reaching ports 3000 and 8081. On Fedora with
   firewalld, allow them for your network (for example `sudo firewall-cmd --add-port=8081/tcp
   --add-port=3000/tcp`, which lasts until reboot).
-- Expo Go covers the demo flow. Native Google sign-in and push notifications need a
-  development build (#85, #89); push also needs the EAS project id and APNs/FCM
-  credentials listed in `mobile/README.md#push-notifications`.
+- Expo Go covers the demo flow. Native Google and Apple sign-in and push
+  notifications need a development build (#85, #89, #92); push also needs the EAS
+  project id and APNs/FCM credentials listed in `mobile/README.md#push-notifications`,
+  and Apple needs iOS 13+ and `APPLE_CLIENT_ID` on the server; the button stays
+  hidden elsewhere.
 
 ## Demo flow with synthetic data
 
@@ -178,6 +180,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | no | Caption generation through [OpenRouter](https://openrouter.ai) when `OPENAI_API_KEY` is unset (OpenAI wins if both are set). `OPENROUTER_MODEL` is required with the key and has no default: pick an id at openrouter.ai/models (ids ending in `:free` cost nothing but are rate limited, roughly 20 requests/minute and 50/day on a free account, and some providers log prompts, which contain reviewer quotes). The request asks the provider to turn reasoning off, because thinking models such as DeepSeek V4.1 Flash otherwise use the whole 400-token budget and return empty text. Weaker models fail the JSON/length checks more often; those drafts are marked `failed` and can be retried |
 | `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`, applies to either provider); on timeout the draft is marked `failed` with an actionable error |
 | `DRAFT_PIPELINE_INTERVAL_MS` | no | Worker sweep interval (default `60000`) |
+| `APPLE_CLIENT_ID` | for Apple sign-in | Comma-separated audiences accepted from Apple identity tokens. The native app uses its bundle id `ca.visda.praiseloop`; a Services ID is added only when web Apple sign-in exists. Empty fails closed with 401 (see [auth.md](auth.md)) |
 | `EXPO_ACCESS_TOKEN` | no | Expo push access token; only needed if enhanced push security is enabled on the Expo project |
 | `EMAIL_TRANSPORT` | no | `fake` (default outside production) or `resend`. `fake` records to an in-memory outbox and logs an `email_outbox` line, and is refused in a production process |
 | `EMAIL_FROM` | for real sends | Sender, for example `Praise Loop <no-reply@mail.example.com>`, on a domain verified in Resend. With the fake transport it defaults to `Praise Loop <no-reply@praiseloop.invalid>` |

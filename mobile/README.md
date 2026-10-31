@@ -12,6 +12,9 @@ of the root `package.json` and is never part of the web Docker build.
 - Google sign-in needs a development or store build and the iOS/Android OAuth
   clients from #78; Expo Go does not contain the native Google module, so it
   offers demo and email-code sign-in instead.
+- Apple sign-in needs iOS 13+, a development or store build, an App ID with the
+  **Sign in with Apple** capability, and `APPLE_CLIENT_ID=ca.visda.praiseloop`
+  (plus any future Services ID) on the server. Expo Go and Android hide it.
 
 ## Run it
 
@@ -58,12 +61,16 @@ share-sheet flow (`#87`) and the profile screen (`#151`), reached from the initi
 avatar in the queue header. The profile shows the owner's name and email (the name
 is editable, the email is not), the linked sign-in methods (link Google, or
 unlink one after a confirmation while another remains), the plan and this week's
-usage, the notification toggle, the app version and API server, and **Sign out**. Sign-in is **Continue
-with Google** in a development or store build (#85/#81); the same screen always
-offers an email-code option, and a development server with `MOBILE_DEV_AUTH=1`
-also offers a demo owner, which is the fastest way to walk the whole flow with
-synthetic data. Expo Go hides Google because the native module is absent, so
-demo and email-code sign-in are the paths there.
+usage, the notification toggle, the app version and API server, and **Sign out**.
+Sign-in offers **Continue with Google** (#85/#81) and, on iOS 13+ with the native
+module, **Continue with Apple** (#92) in a development or store build; the same
+screen always offers an email-code option, and a development server with
+`MOBILE_DEV_AUTH=1` also offers a demo owner, which is the fastest way to walk the
+whole flow with synthetic data. Expo Go hides Google and Apple because their
+native modules are absent, so demo and email-code sign-in are the paths there.
+Apple sends the owner's name only on the first authorization; the app forwards it
+with the identity token so the server can fill a missing name without replacing
+an edited one.
 
 ```bash
 # repo root
@@ -130,9 +137,9 @@ npm test
 ```
 
 CI runs the same commands in the `mobile` job. Tests cover the API client's error
-mapping (401/409/429/network/timeout), the version gate, native Google sign-in
-availability/cancellation, the Google token exchange (success, invalid response,
-401), the no-business screen's onboarding link and visibility, the keychain
+mapping (401/409/429/network/timeout), the version gate, native Google and Apple
+sign-in availability/cancellation, both token exchanges (success, invalid
+response, 401), the no-business screen's onboarding link and visibility, the keychain
 session store, draft/version API shapes, queue list states and generation
 progress, the draft image cache (bearer header, shared downloads, retry, eviction
 and the 401 path), the profile helpers and API wrapper (name rule, initials,
@@ -150,7 +157,10 @@ Local builds and EAS Build both work. Expo Router is the router; Jest with the
 `jest-expo` preset runs the tests. No native `ios/` or `android/` folders are
 committed. Google sign-in is compiled in at prebuild through the config plugin,
 so set `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` and rebuild after changing OAuth
-clients; changing it does not affect `expo start` or Expo Go. The bundle ID /
+clients; changing it does not affect `expo start` or Expo Go. Apple sign-in is
+compiled in through the `expo-apple-authentication` plugin and `usesAppleSignIn`,
+so it also needs a rebuild after the App ID gains the capability. The bundle ID /
 package name is `ca.visda.praiseloop` as a placeholder:
 the owner must confirm it before store setup (#91), because it cannot change after
-release.
+release. No device or simulator check of Apple sign-in was run in #92; it waits on
+the owner's Apple Developer setup.

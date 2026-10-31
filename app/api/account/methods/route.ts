@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAppleIdToken } from "../../../../lib/appleIdToken";
 import { currentOwner, ownerRoute } from "../../../../lib/authorization";
 import { linkIdentityToOwner, listMethods, unlinkMethod, type LinkFailure } from "../../../../lib/authLinking";
 import { verifyGoogleIdToken } from "../../../../lib/googleIdToken";
@@ -23,21 +24,34 @@ async function handleGET() {
   return NextResponse.json({ methods: await listMethods(currentOwner()) });
 }
 
-// Link a method from an already signed-in session. Google is the only provider
-// with a native token exchange today; a future provider adds its verifier here.
+// Link a method from an already signed-in session. Google and Apple have native
+// token exchanges today; a future provider adds its verifier here.
 async function handlePOST(req: NextRequest) {
   const body = await req.json().catch(() => null) as { provider?: unknown; idToken?: unknown } | null;
-  if (body?.provider !== "google") return NextResponse.json({ error: "Only Google can be linked right now" }, { status: 400 });
-  const identity = typeof body.idToken === "string" ? await verifyGoogleIdToken(body.idToken) : null;
-  if (!identity) return NextResponse.json({ error: "Invalid Google sign-in" }, { status: 400 });
-  const result = await linkIdentityToOwner(currentOwner(), {
-    provider: "google",
-    subject: identity.sub,
-    email: identity.email,
-    emailVerified: true,
-    name: identity.name
-  });
-  return result.ok ? NextResponse.json({ methods: result.methods }) : fail(result.reason);
+  if (body?.provider === "google") {
+    const identity = typeof body.idToken === "string" ? await verifyGoogleIdToken(body.idToken) : null;
+    if (!identity) return NextResponse.json({ error: "Invalid Google sign-in" }, { status: 400 });
+    const result = await linkIdentityToOwner(currentOwner(), {
+      provider: "google",
+      subject: identity.sub,
+      email: identity.email,
+      emailVerified: true,
+      name: identity.name
+    });
+    return result.ok ? NextResponse.json({ methods: result.methods }) : fail(result.reason);
+  }
+  if (body?.provider === "apple") {
+    const identity = typeof body.idToken === "string" ? await verifyAppleIdToken(body.idToken) : null;
+    if (!identity) return NextResponse.json({ error: "Invalid Apple sign-in" }, { status: 400 });
+    const result = await linkIdentityToOwner(currentOwner(), {
+      provider: "apple",
+      subject: identity.subject,
+      email: identity.email,
+      emailVerified: identity.emailVerified
+    });
+    return result.ok ? NextResponse.json({ methods: result.methods }) : fail(result.reason);
+  }
+  return NextResponse.json({ error: "Only Google and Apple can be linked right now" }, { status: 400 });
 }
 
 // Unlink by provider. The last method is refused by the shared policy.

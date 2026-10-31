@@ -338,10 +338,11 @@ profile screen (#151), so the two cannot disagree.
 
 One owner can have several sign-in methods, but every path uses one rule: the
 provider plus its stable subject is the identity, never the email alone. Google
-may still link an owner that has the same verified address but no Google row;
-a different Google subject on an already-linked address is rejected, as before
-(#116/#117). A provider whose email claim is not guaranteed verified (Microsoft
-later) creates a new owner instead of linking by email. A signed-in owner can
+and Apple's real verified addresses may still link an owner that has the same
+address but no row for that provider; a different subject on an already-linked
+address is rejected, as before (#116/#117). Apple's private relay address never
+links by email. A provider whose email claim is not guaranteed verified
+(Microsoft later) creates a new owner instead of linking by email. A signed-in owner can
 link another method from `/account` or the phone profile even when the emails
 differ, and the last method cannot be unlinked. The phone links Google from the
 profile with a native ID token through the same route.
@@ -349,9 +350,9 @@ profile with a native ID token through the same route.
 The shared code is `lib/authLinking.ts`; `docs/auth.md` records the policy and
 `docs/decisions.md` records why. Migration 017 records the method's email and
 its added/last-used timestamps, and is additive. `GET /api/account/methods`,
-`POST /api/account/methods` (verified Google ID token) and
+`POST /api/account/methods` (a verified Google or Apple ID token) and
 `DELETE /api/account/methods` are owner-wide and work with cookie and bearer
-sessions.
+sessions. `/account` labels both providers "Google" and "Apple".
 
 Rollback: stop linking writes, retain `auth_accounts.email`, `created_at` and
 `last_used_at`; old code ignores the extra columns. No owner or business data is
@@ -390,7 +391,7 @@ instead of spreading account things through the nav and the business switcher.
   states can be walked with `npm run dev:seed`.
 
 
-## Phone sign-in (#85)
+## Phone sign-in (#85, #92)
 
 The phone signs in to the same owner account as the web. Google uses the native
 account picker: the app sends the Google ID token to `POST /api/mobile/session`
@@ -400,16 +401,27 @@ and keeps only our bearer token in the keychain.
   development or store build, not Expo Go) and `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
   is set. Cancelling the picker returns to sign-in without an error banner; a
   failed exchange shows a plain-language message.
-- Expo Go hides the Google button and keeps the dev-only demo owner and the
-  email-code sign-in.
+- **Continue with Apple** appears on iOS 13+ when `expo-apple-authentication` is
+  compiled in and reports available. It requests name and email, sends the Apple
+  identity token (and the first-sign-in name, if any) to
+  `POST /api/mobile/session/apple`, and keeps only our bearer token. Cancelling
+  the Apple sheet is also a quiet no-op. The server verifies Apple's signature,
+  issuer, expiry and `APPLE_CLIENT_ID`; a private-relay address never links to an
+  existing owner by email.
+- Expo Go hides the Google and Apple buttons and keeps the dev-only demo owner
+  and the email-code sign-in. Android hides Apple because the module and the
+  platform do not offer it.
 - An owner with no business sees a short setup screen instead of the queue: a
   heading, one sentence that setup and branding happen on the web, **Set up on
   the web** (opens `${apiBaseUrl}/onboarding`; hidden when the build has no API
   URL) and **Check again** to reload the business list.
 - Covered by `mobile/__tests__/google.test.ts`,
-  `mobile/__tests__/googleSignIn.test.ts` and
-  `mobile/__tests__/onboarding.test.ts`. A device or simulator check with the
-  real OAuth clients still waits on #78.
+  `mobile/__tests__/googleSignIn.test.ts`, `mobile/__tests__/apple.test.ts`,
+  `mobile/__tests__/appleSignIn.test.ts` and
+  `mobile/__tests__/onboarding.test.ts`. The server side is
+  `scripts/test-apple-signin.ts`. A device or simulator check with the real
+  OAuth clients and Apple account still waits on #78 and #92 owner setup; none
+  was run in this change.
 
 ## Phone profile screen (#151)
 

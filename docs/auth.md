@@ -115,7 +115,7 @@ real Google login still requires owner-provided OAuth configuration and a manual
 No live OAuth acceptance is claimed without that configuration.
 
 Google sign-in from the app (#81): the app sends `{ "idToken": "<Google ID token>" }` to
-`POST /api/mobile/session`, a public route (the only one besides NextAuth). The server
+`POST /api/mobile/session`, a public route (with NextAuth and the other sign-in routes). The server
 verifies the RS256 signature against Google's published keys
 (https://www.googleapis.com/oauth2/v3/certs, cached by `jose`), the issuer
 (`accounts.google.com`), expiry, `email_verified`, and that the audience is
@@ -152,6 +152,55 @@ Owner steps to create the app's OAuth clients (Google Cloud Console, Google Auth
    reverse iOS scheme goes in `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` for prebuild only
    (see `mobile/README.md`).
 
+Sign in with Apple from the app (#92): the app sends `{ "idToken": "<Apple identity
+token>", "fullName": "<optional first-sign-in name>" }` to
+`POST /api/mobile/session/apple`, a public route like the Google exchange. The server
+verifies the RS256 signature against Apple's published keys
+(https://appleid.apple.com/auth/keys, cached by `jose`), the issuer
+(`https://appleid.apple.com`), expiry, and that the audience is one of the
+comma-separated values in `APPLE_CLIENT_ID` (the app's bundle id
+`ca.visda.praiseloop`; a Services ID is added only when web sign-in exists). Missing
+`APPLE_CLIENT_ID` returns 401 for every request (fail closed), and every other
+invalid token gets the same generic 401. It then finds or creates the owner through
+`auth_accounts` (`provider = apple`, `provider_account_id = sub`), the same row a
+future web Apple login will use. The Apple token is never stored or logged. Failed
+attempts share the Google limiter: 10 per 15 minutes per client IP, in process
+memory, as described above.
+
+Apple only sends the owner's name on the first authorization, outside the token. The
+optional `fullName` is trimmed and capped at 80 characters and passed to
+`fillProviderName`, so it can fill a missing name but never replaces a name the owner
+edited. Apple's `@privaterelay.appleid.com` address is recorded on the method row but
+never auto-links an existing owner by email; a real verified address follows the same
+policy as Google. A signed-in owner can link Apple through
+`POST /api/account/methods` with `{ "provider": "apple", "idToken": "..." }` (the
+phone API; no Apple linking button is shown on the web or phone yet), which uses
+the same verified token and subject rules and also allows a relay address because
+the live session already proves control of the account.
+
+Owner setup for the native app: in the Apple Developer portal create an App ID for
+`ca.visda.praiseloop` with the **Sign in with Apple** capability (or let Xcode/EAS
+enable it), then add the same bundle id to `APPLE_CLIENT_ID`. No key, secret or
+Services ID is needed for the native token flow. Nothing was run on a device or
+simulator in this change; the live check waits on the owner's Apple account.
+
+Web Apple sign-in: not built yet. NextAuth would need an Apple provider with a
+Services ID and a client secret JWT signed by a `.p8` key, and the browser redirect
+domain must be verified with Apple. That work is a follow-up; the native flow above
+does not depend on it. Owner steps when it is built:
+
+1. Create (or reuse) the App ID above with **Sign in with Apple** enabled.
+2. Create a **Services ID** for the web hostname, configure its return URL as
+   `${NEXTAUTH_URL}/api/auth/callback/apple`, and add the domain (and any subdomain)
+   under **Sign in with Apple > Configure > Domains and Subdomains**, then verify the
+   domain by downloading Apple's file and serving it at
+   `/.well-known/apple-developer-domain-association.txt`.
+3. Create a **Key** with Sign in with Apple enabled, download the `.p8` once, note
+   its Key ID and the Team ID, and generate the short-lived client secret JWT from
+   it at runtime (never commit the key).
+4. Add the Services ID to `APPLE_CLIENT_ID` alongside the bundle id so the server
+   verifier accepts web identity tokens too.
+
 ## Linking several sign-in methods to one owner (#156)
 
 One owner can have several methods in `auth_accounts`. Every sign-in path (web
@@ -162,10 +211,11 @@ NextAuth callback and the mobile exchange) calls the same policy in
   itself. A returning Google `sub` is the same owner even if Google now reports a
   different address.
 - **Email can find an existing owner only when the provider guarantees the
-  claim is verified.** Google is trusted today; a future verified email code
-  joins that list. The address must match the owner row. An owner linked to a
-  different subject for the same provider is rejected, which is the #116/#117
-  reassigned-address rule.
+  claim is verified.** Google, our own email codes and Apple's real verified
+  addresses are trusted; Apple's `@privaterelay.appleid.com` address is never
+  used for this link because it is not the owner's own mailbox. The address must
+  match the owner row. An owner linked to a different subject for the same
+  provider is rejected, which is the #116/#117 reassigned-address rule.
 - **A provider whose email is not guaranteed verified never links by email.**
   Microsoft's `email` claim is the current example: it creates a new owner with
   no login email (the provider address is kept only on the method row), or is
@@ -177,7 +227,8 @@ NextAuth callback and the mobile exchange) calls the same policy in
   web this happens when an owner on `/account` presses "Link Google": the
   NextAuth callback sees the live session and links instead of switching
   accounts. `POST /api/account/methods` does the same for the phone with a
-  verified Google ID token. Neither action requires the emails to match.
+  verified Google or Apple ID token. Neither action requires the emails to
+  match.
 - **Unlinking is refused for the last method.** `DELETE /api/account/methods`
   with `{ "provider": "google" }` removes a method only while another remains,
   so an owner cannot lock themselves out. `GET /api/account/methods` is the

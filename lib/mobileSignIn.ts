@@ -1,3 +1,4 @@
+import type { AppleIdentity } from "./appleIdToken";
 import type { GoogleIdentity } from "./googleIdToken";
 import { signInWithIdentity } from "./authLinking";
 
@@ -12,6 +13,20 @@ export async function findOrCreateGoogleOwner(identity: GoogleIdentity) {
     email: identity.email,
     emailVerified: true,
     name: identity.name
+  });
+  return result.ok ? result.ownerId : null;
+}
+
+// Apple identity tokens carry the stable `sub`, never a name. The app may pass
+// the first-sign-in name separately so fillProviderName can use it without
+// replacing a name the owner edited.
+export async function findOrCreateAppleOwner(identity: AppleIdentity, name: string | null = null) {
+  const result = await signInWithIdentity({
+    provider: "apple",
+    subject: identity.subject,
+    email: identity.email,
+    emailVerified: identity.emailVerified,
+    name
   });
   return result.ok ? result.ownerId : null;
 }

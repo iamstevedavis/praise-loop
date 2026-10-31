@@ -34,6 +34,19 @@ export async function signInWithGoogleToken(idToken: string): Promise<void> {
   await sessionStore.save(session.token);
 }
 
+// Native Sign in with Apple (#92): Apple sends the name only on the first
+// authorization, so it is passed alongside the identity token. Neither is stored.
+export async function signInWithAppleToken(identityToken: string, fullName: string | null = null): Promise<void> {
+  const session = await api.request<{ token?: unknown }>("/api/mobile/session/apple", {
+    method: "POST",
+    body: { idToken: identityToken, ...(fullName ? { fullName } : {}) }
+  });
+  if (typeof session?.token !== "string" || session.token.length === 0) {
+    throw new Error("The Apple sign-in response was invalid.");
+  }
+  await sessionStore.save(session.token);
+}
+
 // Revoking is best-effort: the local token is cleared even when the server is
 // unreachable, so the next launch starts signed out. The push token is removed
 // first, while the session that owns it is still valid.
