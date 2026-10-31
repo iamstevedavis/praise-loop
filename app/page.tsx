@@ -118,7 +118,7 @@ export default function HomePage() {
         setDemoError(result.error ?? "Demo sign-in failed; try again.");
         return;
       }
-      window.location.assign(notice.callbackUrl ?? "/approval");
+      router.replace(notice.callbackUrl ?? "/approval");
     } catch {
       setDemoError("Could not reach PraiseLoop; try again.");
     } finally { setDemoBusy(false); }
