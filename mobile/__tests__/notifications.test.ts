@@ -345,6 +345,18 @@ describe("notification toggle and launch refresh", () => {
     expect(request.mock.calls.map(call => call[1].method)).toEqual(["POST", "DELETE"]);
   });
 
+  it("does not leave a pending marker when notifications were never on (Not now)", async () => {
+    const { client, request } = apiMock();
+    const savePending = jest.fn().mockResolvedValue(undefined);
+    const saveChoice = jest.fn().mockResolvedValue(undefined);
+    const token = jest.fn().mockRejectedValue(new Error("no permission"));
+    await disableNotifications(client, deps({ loadChoice: async () => null, cachedToken: () => null, savePending, saveChoice, token }));
+    expect(saveChoice).toHaveBeenCalledWith("off");
+    expect(savePending).not.toHaveBeenCalled();
+    expect(token).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("refreshes the token on launch only when notifications are on and permission is granted", async () => {
     const { client, request } = apiMock();
 
