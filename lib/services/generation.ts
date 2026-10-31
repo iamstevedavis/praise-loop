@@ -1,5 +1,6 @@
 import { validTimezone } from "../timezone";
 import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
 import { query, transaction } from "../db";
 import { chargeGeneration } from "../authorization";
 import { selectQuoteCandidates } from "./quoteSelector";
@@ -49,6 +50,14 @@ export async function requestGeneration(businessId: number, limit = 5, now = new
     return { inserted:candidates.length, reason, periodStart:week, target:effectiveTarget };
   });
 }
+// Removes a freshly rendered file when its draft no longer exists, so a render that was in flight when
+// the account was deleted does not leave the owner's content on disk. A file whose draft still exists
+// is kept.
+export async function discardOrphanRender(draftId:number,file:string){
+  if ((await query("SELECT 1 FROM draft_posts WHERE id=$1",[draftId])).rowCount) return false;
+  await rm(file,{force:true}).catch(()=>undefined);
+  return true;
+}
 export type GenerationDeps = { captions: typeof generateCaptionVariants; render: typeof renderDraftImage; clock: () => Date };
 const defaults: GenerationDeps = { captions:generateCaptionVariants, render:renderDraftImage, clock:()=>new Date() };
 export async function processGeneration(id: number, deps: GenerationDeps = defaults) {
@@ -74,7 +83,12 @@ export async function processGeneration(id: number, deps: GenerationDeps = defau
         brandHex:row.brand_colors.primary,secondaryBrandHex:row.brand_colors.secondary,logoUrl:row.logo_url,
         brandTone:row.brand_tone,templateConfig:row.brand_colors,watermark:entitlements.limits.watermark});
       const saved = await query("UPDATE draft_posts SET image_path=$2,updated_at=now() WHERE id=$1 AND status IN ('draft','failed') AND EXISTS(SELECT 1 FROM generation_jobs WHERE id=$3 AND lease=$4 AND state='running') RETURNING id",[row.id,image.publicPath,id,lease]);
-      if (!saved.rowCount) return false;
+      if (!saved.rowCount) {
+        // The draft was deleted while this render was in flight (account deletion): nothing will ever
+        // point at the file, and it holds the owner's business name and review text, so remove it.
+        if (typeof image.fileSystemPath === "string") await discardOrphanRender(row.id,image.fileSystemPath);
+        return false;
+      }
     }
     await transaction(async c=>{
       const done = await c.query("UPDATE generation_jobs SET state='complete',error_code=NULL,lease=NULL,lease_until=NULL WHERE id=$1 AND lease=$2 AND state='running' RETURNING business_id,period_start,draft_id",[id,lease]);
