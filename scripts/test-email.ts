@@ -208,8 +208,8 @@ async function main() {
     assert.equal(body.html, undefined, "plain text only, no HTML or tracking");
     assert.doesNotMatch(logs.join("\n"), /re_synthetic_key_never_log_me|owner@example\.invalid/);
 
-    const providerError = async (status: number, code: EmailError["code"], headers?: Record<string, string>) => {
-      globalThis.fetch = (async () => new Response(JSON.stringify({ message: "synthetic provider detail" }), { status, headers })) as typeof fetch;
+    const providerError = async (status: number, code: EmailError["code"], headers?: Record<string, string>, name?: string) => {
+      globalThis.fetch = (async () => new Response(JSON.stringify({ name, message: "synthetic provider detail" }), { status, headers })) as typeof fetch;
       await assert.rejects(
         sendEmail({ to: "owner@example.invalid", subject: "Code", text: "Synthetic body" }, { throttle: freshThrottle() }),
         (error: unknown) =>
@@ -227,6 +227,9 @@ async function main() {
     );
     await providerError(401, "email_auth");
     await providerError(403, "email_sender");
+    await providerError(403, "email_sender", undefined, "validation_error");
+    await providerError(403, "email_auth", undefined, "restricted_api_key");
+    await providerError(403, "email_auth", undefined, "suspended_api_key");
     await providerError(422, "email_invalid");
     await providerError(500, "email_provider");
     await providerError(503, "email_provider");

@@ -185,9 +185,14 @@ export function resendTransport(options: ResendOptions): EmailTransport {
         if (response.status === 401) {
           throw new EmailError("email_auth", "email_auth: the email provider rejected the API key");
         }
-        // Resend answers 403 when the key is valid but the sender is refused,
-        // for example an unverified EMAIL_FROM domain or a send-restricted key.
+        // Resend answers 403 when the sender is refused, for example an unverified EMAIL_FROM domain.
         if (response.status === 403) {
+          // A 403 can also mean the key itself is inactive or suspended. Only the provider's error name
+          // is read; the message and body are never kept.
+          const name = await response.json().then((body: { name?: unknown } | null) => body?.name, () => undefined);
+          if (name === "restricted_api_key" || name === "suspended_api_key" || name === "invalid_api_key") {
+            throw new EmailError("email_auth", "email_auth: the email provider rejected the API key");
+          }
           throw new EmailError("email_sender", "email_sender: the email provider refused the sender; check that the EMAIL_FROM domain is verified");
         }
         if (response.status === 429) {
