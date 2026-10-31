@@ -357,6 +357,27 @@ describe("notification toggle and launch refresh", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("keeps the token pending when enabling fails after the registration may have reached the server", async () => {
+    const failing = jest.fn().mockRejectedValue(new Error("response lost"));
+    const savePending = jest.fn().mockResolvedValue(undefined);
+    const result = await enableNotifications({ request: failing } as unknown as PushApi, deps({ permission: async () => "granted", savePending }));
+    expect(result).toEqual({ status: "failed" });
+    expect(savePending).toHaveBeenCalledWith(TOKEN);
+
+    const { client, request } = apiMock();
+    const clearPending = jest.fn().mockResolvedValue(undefined);
+    await unregisterPushDevice(client, deps({ loadChoice: async () => null, loadPending: async () => TOKEN, clearPending }));
+    expect(request.mock.calls.map(call => call[1].method)).toEqual(["POST", "DELETE"]);
+    expect(clearPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears an earlier pending cleanup once enabling succeeds", async () => {
+    const { client } = apiMock();
+    const clearPending = jest.fn().mockResolvedValue(undefined);
+    await expect(enableNotifications(client, deps({ permission: async () => "granted", clearPending }))).resolves.toEqual({ status: "on" });
+    expect(clearPending).toHaveBeenCalledTimes(1);
+  });
+
   it("refreshes the token on launch only when notifications are on and permission is granted", async () => {
     const { client, request } = apiMock();
 
