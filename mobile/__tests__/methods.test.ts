@@ -1,5 +1,5 @@
 import { createApiClient } from "../src/api/client";
-import { linkGoogleMethod, listAuthMethods, unlinkAuthMethod } from "../src/api/methods";
+import { linkGoogleMethod, listAuthMethods, providerName, unlinkAuthMethod } from "../src/api/methods";
 
 function client(status: number, body: unknown = {}, calls: { url: string; method?: string; body?: unknown }[] = []) {
   return createApiClient({
@@ -34,6 +34,12 @@ describe("sign-in methods API", () => {
     await linkGoogleMethod(client(200, { methods: [google] }, calls), "synthetic-id-token");
     expect(calls[0].method).toBe("POST");
     expect(calls[0].body).toEqual({ provider: "google", idToken: "synthetic-id-token" });
+  });
+
+  it("labels Apple and Google the same way as the web", () => {
+    expect(providerName("apple")).toBe("Apple");
+    expect(providerName("google")).toBe("Google");
+    expect(providerName("microsoft")).toBe("microsoft");
   });
 
   it("rejects malformed methods instead of showing another owner's data", async () => {

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { isSignedOut } from "../api/client";
 import { draftImageLoader } from "../media/draftImage";
 import { sessionStore } from "./store";
-import { signInDemo as requestDemoSession, signInWithEmail, signInWithGoogleToken, signOut as revokeSession } from "./session";
+import { signInDemo as requestDemoSession, signInWithAppleToken, signInWithEmail, signInWithGoogleToken, signOut as revokeSession } from "./session";
 import type { DemoOwnerKey } from "./demoOwners";
 
 type SessionStatus = "loading" | "signedOut" | "signedIn";
@@ -16,6 +16,7 @@ type SessionValue = {
   signInDemo: (owner: DemoOwnerKey) => Promise<void>;
   signInEmail: (email: string, code: string) => Promise<void>;
   signInGoogle: (idToken: string) => Promise<void>;
+  signInApple: (identityToken: string, fullName: string | null) => Promise<void>;
   signOut: () => Promise<void>;
   // Call from a screen's catch: a 401 clears the keychain and returns the app to
   // sign-in, which is what the API means by "session ended".
@@ -71,6 +72,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus("signedIn");
   }, []);
 
+  const signInApple = useCallback(async (identityToken: string, fullName: string | null) => {
+    await signInWithAppleToken(identityToken, fullName);
+    setToken(sessionStore.current());
+    setSessionEnded(false);
+    setStatus("signedIn");
+  }, []);
+
   const signOut = useCallback(async () => {
     await revokeSession();
     // Draft images are owner-private; do not let a later session reuse them.
@@ -93,8 +101,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [expire]);
 
   const value = useMemo(
-    () => ({ status, token, sessionEnded, signInDemo, signInEmail, signInGoogle, signOut, handleError, expire }),
-    [status, token, sessionEnded, signInDemo, signInEmail, signInGoogle, signOut, handleError, expire]
+    () => ({ status, token, sessionEnded, signInDemo, signInEmail, signInGoogle, signInApple, signOut, handleError, expire }),
+    [status, token, sessionEnded, signInDemo, signInEmail, signInGoogle, signInApple, signOut, handleError, expire]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

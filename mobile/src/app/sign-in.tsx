@@ -4,6 +4,7 @@ import { Redirect, router } from "expo-router";
 import { api } from "../api";
 import { ApiError } from "../api/client";
 import { fetchMobileConfig, type MobileConfig } from "../api/config";
+import { appleSignInAvailable, isAppleSignInCancelled, signInWithApple } from "../auth/apple";
 import { googleSignInAvailable, isGoogleSignInCancelled, signInWithGoogle } from "../auth/google";
 import { useSession } from "../auth/SessionProvider";
 import { DEMO_OWNERS, type DemoOwnerKey } from "../auth/demoOwners";
@@ -12,8 +13,9 @@ import { Banner, Button } from "../ui/components";
 import { colors } from "../ui/theme";
 
 export default function SignInScreen() {
-  const { status, sessionEnded, signInDemo, signInEmail, signInGoogle } = useSession();
+  const { status, sessionEnded, signInDemo, signInEmail, signInGoogle, signInApple } = useSession();
   const [config, setConfig] = useState<MobileConfig | null>(null);
+  const [appleReady, setAppleReady] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [emailStage, setEmailStage] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
@@ -28,6 +30,14 @@ export default function SignInScreen() {
     fetchMobileConfig(api)
       .then(value => { if (!cancelled) setConfig(value); })
       .catch(() => { if (!cancelled) setConfigError("Can’t reach the PraiseLoop server. Check that it is running and that the app points at your machine."); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    appleSignInAvailable()
+      .then(available => { if (!cancelled) setAppleReady(available); })
+      .catch(() => { /* Hidden when the module or iOS version is unavailable. */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -110,6 +120,24 @@ export default function SignInScreen() {
     }
   }, [busy, signInGoogle]);
 
+  const continueWithApple = useCallback(async () => {
+    if (busy) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const { identityToken, fullName } = await signInWithApple();
+      await signInApple(identityToken, fullName);
+      router.replace("/queue");
+    } catch (cause) {
+      // Cancelling the Apple sheet is a no-op, not an error.
+      if (isAppleSignInCancelled(cause)) return;
+      setError(cause instanceof ApiError && cause.kind === "signedOut"
+        ? "That Apple account couldn’t sign in. Try a different one."
+        : cause instanceof Error ? cause.message : "Apple sign-in failed. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, signInApple]);
+
   if (status === "signedIn") return <Redirect href="/queue" />;
 
   return (
@@ -126,6 +154,10 @@ export default function SignInScreen() {
       {error ? <Banner message={error} tone="danger" /> : null}
       {notice ? <Banner message={notice} /> : null}
       {config === null && !configError ? <ActivityIndicator /> : null}
+
+      {appleReady ? (
+        <Button label="Continue with Apple" onPress={() => { void continueWithApple(); }} loading={busy} />
+      ) : null}
 
       {googleReady ? (
         <Button label="Continue with Google" onPress={() => { void continueWithGoogle(); }} loading={busy} />

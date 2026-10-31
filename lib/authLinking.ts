@@ -5,10 +5,15 @@ import { fillProviderName } from "./services/profile";
 // The one place that decides whether a sign-in method belongs to an owner (#156).
 // A method is identified by the provider plus its stable subject id, never by the
 // email by itself. The email can only be used to find an *existing* owner when the
-// provider guarantees that the address is verified (Google today; email codes
-// later). A signed-in owner may always attach another method because they have
-// proved control of the existing session.
-export const TRUSTED_EMAIL_PROVIDERS = new Set(["google", "email"]);
+// provider guarantees that the address is verified (Google, our own email codes,
+// and Apple's real addresses; not Apple's private relay). A signed-in owner may
+// always attach another method because they have proved control of the existing
+// session.
+export const TRUSTED_EMAIL_PROVIDERS = new Set(["google", "email", "apple"]);
+// Apple's private relay address is stable per app but is not the owner's own
+// mailbox, so it must never select an existing owner. A real verified address
+// still follows the same rule as Google (#156).
+const APPLE_RELAY_DOMAIN = "privaterelay.appleid.com";
 
 export type AuthIdentity = {
   provider: string;
@@ -39,7 +44,9 @@ function normalizeIdentity(identity: AuthIdentity): AuthIdentity | null {
 }
 
 function trustedEmail(identity: AuthIdentity) {
-  return identity.emailVerified && !!identity.email && TRUSTED_EMAIL_PROVIDERS.has(identity.provider);
+  if (!identity.emailVerified || !identity.email || !TRUSTED_EMAIL_PROVIDERS.has(identity.provider)) return false;
+  if (identity.provider === "apple" && identity.email.endsWith(`@${APPLE_RELAY_DOMAIN}`)) return false;
+  return true;
 }
 
 async function lockOwner(ownerId: string) {

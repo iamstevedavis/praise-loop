@@ -54,7 +54,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: "./assets/icon.png",
   ios: {
     bundleIdentifier,
-    supportsTablet: false
+    supportsTablet: false,
+    usesAppleSignIn: true
   },
   android: {
     package: bundleIdentifier,
@@ -63,7 +64,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#123456"
     }
   },
-  plugins: ["expo-router", mediaLibraryPlugin, "expo-notifications", ...googlePlugins],
+  plugins: [
+    "expo-router",
+    mediaLibraryPlugin,
+    "expo-notifications",
+    "expo-apple-authentication",
+    ...googlePlugins
+  ],
   experiments: {
     typedRoutes: true
   },

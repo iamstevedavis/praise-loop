@@ -278,7 +278,7 @@ export default function ProfileScreen() {
                     style={styles.input}
                   />
                   <Text style={styles.hint}>
-                    1 to {NAME_MAX_LENGTH} characters. Only your name changes — the email is the one Google verified.
+                    1 to {NAME_MAX_LENGTH} characters. Only your name changes — the email is the one your sign-in provider verified.
                   </Text>
                   {formError ? <Banner message={formError} tone="danger" /> : null}
                   <View style={styles.formActions}>
@@ -301,7 +301,7 @@ export default function ProfileScreen() {
                 <Chip label="Read-only" />
               </View>
               {profile.nameSource === "owner" ? (
-                <Text style={styles.hint}>Google will not overwrite the name you set here.</Text>
+                <Text style={styles.hint}>Your sign-in provider will not overwrite the name you set here.</Text>
               ) : null}
             </>
           ) : loading ? (
