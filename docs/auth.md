@@ -167,6 +167,12 @@ future web Apple login will use. The Apple token is never stored or logged. Fail
 attempts share the Google limiter: 10 per 15 minutes per client IP, in process
 memory, as described above.
 
+Apple-only owners and web setup: the web app has no Apple sign-in yet and the phone has
+no business setup, so an owner who only signed in with Apple cannot set up a business
+until they link Google (Profile, Sign-in methods) and sign in to the web with it. The
+phone's "no business yet" screen says so. A session handoff from the phone to the web is
+a possible follow-up.
+
 Apple only sends the owner's name on the first authorization, outside the token. The
 optional `fullName` is trimmed and capped at 80 characters and passed to
 `fillProviderName`, so it can fill a missing name but never replaces a name the owner
