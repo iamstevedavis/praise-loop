@@ -64,8 +64,8 @@ Fetched 2026-10-30:
   recipient, and maps errors to sanitized codes (`email_auth`, `email_sender`,
   `email_invalid`, `email_throttled`, `email_provider`, `email_timeout`). A 401
   from Resend is `email_auth` (missing or invalid key); a 403 is `email_sender`
-  (valid key, refused sender: usually an unverified `EMAIL_FROM` domain or a
-  send-restricted key). A missing `EMAIL_FROM` or
+  (refused sender: usually an unverified `EMAIL_FROM` domain) unless Resend's error
+  name says the key is inactive, suspended or invalid, which stays `email_auth`. A missing `EMAIL_FROM` or
   `RESEND_API_KEY` fails closed with `email_unavailable` and a clear message.
 
 `sendEmail()` throttles per recipient (5/hour) and per sender (100/hour) with a
