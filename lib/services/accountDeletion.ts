@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { query, transaction } from "../db";
 import { mediaRoot } from "./media";
@@ -41,6 +41,21 @@ export async function removeMediaFiles(
   if (failed) console.error("account_deletion_media_cleanup_failed", { files: failed });
 }
 
+const DRAFT_IMAGE = /^draft-(\d+)(?:-[0-9a-f]+)?\.png$/;
+
+// Files in MEDIA_ROOT named for any of these draft ids, including superseded versions.
+export async function olderImageVersions(draftIds: Set<string>, root = mediaRoot()): Promise<string[]> {
+  if (!draftIds.size) return [];
+  try {
+    return (await readdir(root)).filter(name => {
+      const match = DRAFT_IMAGE.exec(name);
+      return !!match && draftIds.has(match[1]);
+    });
+  } catch {
+    return [];
+  }
+}
+
 // Everything the owner owns goes in one transaction, so a failure leaves the
 // account intact. Existing ON DELETE CASCADE covers reviews, drafts, events,
 // jobs, periods, slot claims, push deliveries and the auth tables; only the
@@ -50,6 +65,7 @@ export async function deleteOwnerAccount(
   ownerId: string,
   remove: (names: string[]) => Promise<void> = removeMediaFiles
 ): Promise<{ mediaFiles: number }> {
+  const draftIds = new Set<string>();
   const names = await transaction(async () => {
     const locked = await query("SELECT 1 FROM auth_users WHERE id=$1 FOR UPDATE", [ownerId]);
     if (!locked.rowCount) throw new Error("Owner not found");
@@ -64,11 +80,12 @@ export async function deleteOwnerAccount(
     )).rows.map(row => row.email.trim().toLowerCase()).filter(Boolean);
 
     const media = new Set<string>();
-    const drafts = await query<{ image_path: string | null }>(
-      `SELECT d.image_path FROM draft_posts d JOIN businesses b ON b.id=d.business_id WHERE b.owner_id=$1`,
+    const drafts = await query<{ id: string; image_path: string | null }>(
+      `SELECT d.id, d.image_path FROM draft_posts d JOIN businesses b ON b.id=d.business_id WHERE b.owner_id=$1`,
       [ownerId]
     );
     for (const row of drafts.rows) {
+      draftIds.add(String(row.id));
       const name = mediaFilename(row.image_path);
       if (name) media.add(name);
     }
@@ -106,6 +123,10 @@ export async function deleteOwnerAccount(
   // Data is committed: cleanup issues are logged and can be retried, never
   // turned into an error that suggests the account still exists.
   try {
+    // Re-rendering or regenerating leaves earlier digest-suffixed versions of a draft's image on
+    // disk with no row pointing at them. Their names carry the draft id, which belongs to this
+    // owner alone, so sweep those too.
+    for (const name of await olderImageVersions(draftIds)) if (!names.includes(name)) names.push(name);
     await remove(names);
   } catch {
     console.error("account_deletion_media_cleanup_failed", { files: names.length });

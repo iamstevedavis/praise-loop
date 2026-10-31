@@ -180,6 +180,13 @@ async function main() {
         );
       }
 
+      // Superseded renders of A's and B's drafts: no row points at them, but the names carry the draft id.
+      for (const owner of [a, b]) {
+        for (const suffix of ["-0123456789abcdef0123", "-fedcba98765432100123"]) {
+          writeFileSync(join(root, `draft-${owner.draftIds[0]}${suffix}.png`), Buffer.from([137, 80, 78, 71]));
+        }
+      }
+
       const route = require("../app/api/account/route");
       const businesses = require("../app/api/businesses/route").GET;
 
@@ -235,6 +242,10 @@ async function main() {
       // A's files are gone; the failed directory removal did not fail the request,
       // and the traversal target outside MEDIA_ROOT was never touched.
       for (const name of ["draft-delete-a.png", "logo-delete-a.png"]) assert.equal(existsSync(join(root, name)), false, `${name} removed`);
+      for (const suffix of ["-0123456789abcdef0123", "-fedcba98765432100123"]) {
+        assert.equal(existsSync(join(root, `draft-${a.draftIds[0]}${suffix}.png`)), false, "A's older image version removed");
+        assert.ok(existsSync(join(root, `draft-${b.draftIds[0]}${suffix}.png`)), "B's older image version remains");
+      }
       assert.ok(existsSync(join(root, "draft-dir-delete-a.png")), "unremovable path left the request successful");
       assert.ok(existsSync(outside), "path traversal target remains");
       rmSync(join(root, "draft-dir-delete-a.png"), { recursive: true, force: true });
