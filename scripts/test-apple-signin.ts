@@ -74,7 +74,9 @@ async function main() {
       assert.equal(firstAccount.provider_account_id, "apple-sub-1");
       assert.equal(firstAccount.email, "apple-owner@example.invalid");
       const firstOwner = (await client.query("SELECT name,email FROM auth_users WHERE id=$1", [firstAccount.owner_id])).rows[0];
-      assert.deepEqual(firstOwner, { name: "Ada Apple", email: "apple-owner@example.invalid" });
+      // Apple is not a trusted-email provider, so the owner row keeps no login address (like any provider
+      // whose claim cannot select an existing owner); the address stays on the method row.
+      assert.deepEqual(firstOwner, { name: "Ada Apple", email: null });
 
       // The same subject always reuses its owner, even when Apple reports a
       // different address on a later sign-in.
@@ -94,23 +96,23 @@ async function main() {
       assert.equal((await client.query("SELECT email FROM auth_users WHERE id=$1", [relayAccount.owner_id])).rows[0].email, null);
       assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE owner_id='google-owner'")).rows[0].n, 1);
 
-      // A real verified address follows the shared policy: an owner with no Apple
-      // row is linked, and a second Apple subject on that address is rejected.
+      // Apple never links by email, even for a real verified address that matches an existing
+      // owner (#92: no account linking): it creates its own owner. Linking is done from a session.
       await client.query(`INSERT INTO auth_users(id,name,email,"emailVerified") VALUES('real-owner','Real Owner','real-owner@example.invalid',now())`);
       assert.equal((await exchange(await token({ email: "real-owner@example.invalid" }, { subject: "apple-real-sub" }))).status, 200);
-      assert.equal((await client.query("SELECT owner_id FROM auth_accounts WHERE provider_account_id='apple-real-sub'")).rows[0].owner_id, "real-owner");
-      assert.equal((await exchange(await token({ email: "real-owner@example.invalid" }, { subject: "apple-real-other" }))).status, 401);
-      assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider_account_id='apple-real-other'")).rows[0].n, 0);
+      const realAccount = (await client.query("SELECT owner_id FROM auth_accounts WHERE provider_account_id='apple-real-sub'")).rows[0];
+      assert.notEqual(realAccount.owner_id, "real-owner");
+      assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE owner_id='real-owner'")).rows[0].n, 0);
 
       // Apple's first-sign-in name fills a missing name, is capped, and never
       // replaces a name the owner edited.
       const longName = "  " + "A".repeat(120) + "  ";
       const named = await exchange(await token({ email: "named@example.invalid" }, { subject: "apple-named-sub" }), longName);
       assert.equal(named.status, 200);
-      assert.equal((await client.query("SELECT name FROM auth_users WHERE email='named@example.invalid'")).rows[0].name, "A".repeat(80));
-      await client.query("UPDATE auth_users SET name='Owner Chosen', name_source='owner' WHERE email='named@example.invalid'");
+      assert.equal((await client.query("SELECT u.name FROM auth_users u JOIN auth_accounts a ON a.owner_id=u.id WHERE a.provider_account_id='apple-named-sub'")).rows[0].name, "A".repeat(80));
+      await client.query("UPDATE auth_users SET name='Owner Chosen', name_source='owner' WHERE id=(SELECT owner_id FROM auth_accounts WHERE provider_account_id='apple-named-sub')");
       assert.equal((await exchange(await token({ email: "named@example.invalid" }, { subject: "apple-named-sub" }), "Apple Again")).status, 200);
-      assert.equal((await client.query("SELECT name FROM auth_users WHERE email='named@example.invalid'")).rows[0].name, "Owner Chosen");
+      assert.equal((await client.query("SELECT u.name FROM auth_users u JOIN auth_accounts a ON a.owner_id=u.id WHERE a.provider_account_id='apple-named-sub'")).rows[0].name, "Owner Chosen");
 
       // Every invalid token is the same generic 401, with no session or owner
       // created. Each attempt starts a fresh limiter window.

@@ -170,9 +170,9 @@ memory, as described above.
 Apple only sends the owner's name on the first authorization, outside the token. The
 optional `fullName` is trimmed and capped at 80 characters and passed to
 `fillProviderName`, so it can fill a missing name but never replaces a name the owner
-edited. Apple's `@privaterelay.appleid.com` address is recorded on the method row but
-never auto-links an existing owner by email; a real verified address follows the same
-policy as Google. A signed-in owner can link Apple through
+edited. Apple's address (possibly an `@privaterelay.appleid.com` relay) is recorded on
+the method row but Apple never auto-links an existing owner by email, as the issue
+requires; a new Apple sign-in creates its own owner. A signed-in owner can link Apple through
 `POST /api/account/methods` with `{ "provider": "apple", "idToken": "..." }` (the
 phone API; no Apple linking button is shown on the web or phone yet), which uses
 the same verified token and subject rules and also allows a relay address because
@@ -211,9 +211,9 @@ NextAuth callback and the mobile exchange) calls the same policy in
   itself. A returning Google `sub` is the same owner even if Google now reports a
   different address.
 - **Email can find an existing owner only when the provider guarantees the
-  claim is verified.** Google, our own email codes and Apple's real verified
-  addresses are trusted; Apple's `@privaterelay.appleid.com` address is never
-  used for this link because it is not the owner's own mailbox. The address must
+  claim is verified.** Google and our own email codes are trusted; Apple is
+  not, because its address can be a private relay and account linking is a
+  separate decision (#92). The address must
   match the owner row. An owner linked to a different subject for the same
   provider is rejected, which is the #116/#117 reassigned-address rule.
 - **A provider whose email is not guaranteed verified never links by email.**
