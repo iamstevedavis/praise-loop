@@ -20,6 +20,19 @@ export async function signInWithEmail(email: string, code: string): Promise<void
   await sessionStore.save(token);
 }
 
+// Native Google Sign-In (#85): the Google ID token goes to the server once, is
+// exchanged for our own bearer session and is never stored or logged here.
+export async function signInWithGoogleToken(idToken: string): Promise<void> {
+  const session = await api.request<{ token?: unknown }>("/api/mobile/session", {
+    method: "POST",
+    body: { idToken }
+  });
+  if (typeof session?.token !== "string" || session.token.length === 0) {
+    throw new Error("The Google sign-in response was invalid.");
+  }
+  await sessionStore.save(session.token);
+}
+
 // Revoking is best-effort: the local token is cleared even when the server is
 // unreachable, so the next launch starts signed out.
 export async function signOut(): Promise<void> {

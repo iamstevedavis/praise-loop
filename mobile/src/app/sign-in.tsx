@@ -4,6 +4,7 @@ import { Redirect, router } from "expo-router";
 import { api } from "../api";
 import { ApiError } from "../api/client";
 import { fetchMobileConfig, type MobileConfig } from "../api/config";
+import { googleSignInAvailable, isGoogleSignInCancelled, signInWithGoogle } from "../auth/google";
 import { useSession } from "../auth/SessionProvider";
 import { DEMO_OWNERS, type DemoOwnerKey } from "../auth/demoOwners";
 import { appConfig } from "../config";
@@ -11,7 +12,7 @@ import { Banner, Button } from "../ui/components";
 import { colors } from "../ui/theme";
 
 export default function SignInScreen() {
-  const { status, sessionEnded, signInDemo, signInEmail } = useSession();
+  const { status, sessionEnded, signInDemo, signInEmail, signInGoogle } = useSession();
   const [config, setConfig] = useState<MobileConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [emailStage, setEmailStage] = useState<"email" | "code">("email");
@@ -89,6 +90,26 @@ export default function SignInScreen() {
     }
   }, [busy, code, email, signInEmail]);
 
+  const googleReady = googleSignInAvailable();
+
+  const continueWithGoogle = useCallback(async () => {
+    if (busy) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const idToken = await signInWithGoogle();
+      await signInGoogle(idToken);
+      router.replace("/queue");
+    } catch (cause) {
+      // Cancelling the Google sheet is a no-op, not an error.
+      if (isGoogleSignInCancelled(cause)) return;
+      setError(cause instanceof ApiError && cause.kind === "signedOut"
+        ? "That Google account couldn’t sign in. Try a different one."
+        : cause instanceof Error ? cause.message : "Google sign-in failed. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, signInGoogle]);
+
   if (status === "signedIn") return <Redirect href="/queue" />;
 
   return (
@@ -105,6 +126,10 @@ export default function SignInScreen() {
       {error ? <Banner message={error} tone="danger" /> : null}
       {notice ? <Banner message={notice} /> : null}
       {config === null && !configError ? <ActivityIndicator /> : null}
+
+      {googleReady ? (
+        <Button label="Continue with Google" onPress={() => { void continueWithGoogle(); }} loading={busy} />
+      ) : null}
 
       <View style={styles.form}>
         <Text style={styles.label}>Sign in with email</Text>

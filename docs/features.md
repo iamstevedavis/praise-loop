@@ -389,6 +389,27 @@ instead of spreading account things through the nav and the business switcher.
   states can be walked with `npm run dev:seed`.
 
 
+## Phone sign-in (#85)
+
+The phone signs in to the same owner account as the web. Google uses the native
+account picker: the app sends the Google ID token to `POST /api/mobile/session`
+and keeps only our bearer token in the keychain.
+
+- **Continue with Google** appears only when the native module is present (a
+  development or store build, not Expo Go) and `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+  is set. Cancelling the picker returns to sign-in without an error banner; a
+  failed exchange shows a plain-language message.
+- Expo Go hides the Google button and keeps the dev-only demo owner and the
+  email-code sign-in.
+- An owner with no business sees a short setup screen instead of the queue: a
+  heading, one sentence that setup and branding happen on the web, **Set up on
+  the web** (opens `${apiBaseUrl}/onboarding`; hidden when the build has no API
+  URL) and **Check again** to reload the business list.
+- Covered by `mobile/__tests__/google.test.ts`,
+  `mobile/__tests__/googleSignIn.test.ts` and
+  `mobile/__tests__/onboarding.test.ts`. A device or simulator check with the
+  real OAuth clients still waits on #78.
+
 ## Phone profile screen (#151)
 
 The phone app reaches the profile from an initials avatar button in the queue
