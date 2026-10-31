@@ -226,7 +226,7 @@ async function main() {
       (error: unknown) => error instanceof EmailError && error.code === "email_throttled" && error.retryAfterMs === 30_000,
     );
     await providerError(401, "email_auth");
-    await providerError(403, "email_auth");
+    await providerError(403, "email_sender");
     await providerError(422, "email_invalid");
     await providerError(500, "email_provider");
     await providerError(503, "email_provider");
