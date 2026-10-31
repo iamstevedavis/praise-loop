@@ -11,6 +11,11 @@ import {
 import { registerPushToken, unregisterPushToken, type PushApi, type PushPlatform } from "./registration";
 import { notificationStore } from "./store";
 
+// A pending entry is either a real token whose DELETE failed, or this marker:
+// the device wanted to unregister but had no token (a relaunch clears the
+// in-memory cache), so the next launch or sign-out has to obtain one first.
+export const PENDING_UNREGISTER_ANY_TOKEN = "*";
+
 export type EnableResult =
   | { status: "on" }
   | { status: "denied" }
@@ -54,6 +59,20 @@ function resolveDeps(deps: Partial<PushDeps>): PushDeps {
   return { ...defaultPushDeps, ...deps };
 }
 
+async function rememberPending(d: PushDeps, pending: string): Promise<void> {
+  try { await d.savePending(pending); } catch { /* nothing more to do */ }
+}
+
+// The marker has no token of its own, so it needs the same lookup the toggle uses.
+async function pendingToken(d: PushDeps, pending: string): Promise<string | null> {
+  if (pending !== PENDING_UNREGISTER_ANY_TOKEN) return pending;
+  const cached = d.cachedToken();
+  if (cached) return cached;
+  const availability = d.availability();
+  if (!availability.available) return null;
+  return d.token(availability.projectId);
+}
+
 // Retries an unregister that failed earlier. The DELETE is owner-scoped, and the phone may now be
 // signed in as a different owner than the one that registered the token, so the token is first
 // registered to the current owner (the server's POST moves a token to its caller) and then removed.
@@ -63,8 +82,11 @@ export async function retryPendingUnregister(client: PushApi, deps: Partial<Push
   try {
     const pending = await d.loadPending();
     if (!pending) return;
-    await registerPushToken(client, pending, d.platform());
-    await unregisterPushToken(client, pending);
+    const token = await pendingToken(d, pending);
+    // Still no token: keep the marker for the next launch or sign-out.
+    if (!token) return;
+    await registerPushToken(client, token, d.platform());
+    await unregisterPushToken(client, token);
     await d.clearPending();
   } catch {
     // Still pending; the next launch or sign-out tries again.
@@ -76,8 +98,26 @@ async function unregisterOrKeepPending(client: PushApi, d: PushDeps, token: stri
   try {
     await unregisterPushToken(client, token);
   } catch {
-    try { await d.savePending(token); } catch { /* nothing more to do */ }
+    await rememberPending(d, token);
   }
+}
+
+// Unregisters whatever token belongs to this device. A relaunch clears the in-memory
+// token, so when the OS cannot produce one the marker keeps the cleanup pending
+// instead of leaving the server registration active forever.
+async function unregisterCurrentDevice(client: PushApi, d: PushDeps): Promise<void> {
+  let token: string | null = null;
+  try {
+    token = d.cachedToken();
+    if (!token) {
+      const availability = d.availability();
+      if (availability.available) token = await d.token(availability.projectId);
+    }
+  } catch {
+    token = null;
+  }
+  if (token) await unregisterOrKeepPending(client, d, token);
+  else await rememberPending(d, PENDING_UNREGISTER_ANY_TOKEN);
 }
 
 // Registration, the toggle and sign-out all touch the same server-side token, so they run one at a
@@ -143,14 +183,11 @@ async function disableNotificationsNow(client: PushApi, deps: Partial<PushDeps> 
   const d = resolveDeps(deps);
   await d.saveChoice("off");
   try {
-    let token = d.cachedToken();
-    if (!token) {
-      const availability = d.availability();
-      if (availability.available) token = await d.token(availability.projectId);
-    }
-    if (token) await unregisterOrKeepPending(client, d, token);
+    await unregisterCurrentDevice(client, d);
   } catch {
-    // The local preference is already off.
+    // The local preference is already off, but the server may still hold this
+    // device; retry once a token can be obtained.
+    await rememberPending(d, PENDING_UNREGISTER_ANY_TOKEN);
   } finally {
     d.forgetToken();
   }
@@ -169,12 +206,7 @@ async function unregisterPushDeviceNow(client: PushApi, deps: Partial<PushDeps> 
     // Notifications off (or never chosen) means there is nothing registered;
     // do not wake the OS just to ask for a token during sign-out.
     if (await d.loadChoice() !== "on") return;
-    let token = d.cachedToken();
-    if (!token) {
-      const availability = d.availability();
-      if (availability.available) token = await d.token(availability.projectId);
-    }
-    if (token) await unregisterOrKeepPending(client, d, token);
+    await unregisterCurrentDevice(client, d);
   } catch {
     // Sign-out clears the local session regardless.
   } finally {

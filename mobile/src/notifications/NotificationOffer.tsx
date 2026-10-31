@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { api } from "../api";
 import { Banner, Button } from "../ui/components";
 import { colors } from "../ui/theme";
-import { enableNotifications } from "./controller";
+import { disableNotifications, enableNotifications } from "./controller";
 import { shouldOfferNotifications, unavailableNote, type NotificationChoice } from "./model";
 import { pushAvailability } from "./native";
 import { notificationStore } from "./store";
@@ -17,14 +18,21 @@ export function NotificationOffer() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Re-read on every focus: a choice made in Profile (or on another screen) must
+  // remove the card without a relaunch.
+  useFocusEffect(useCallback(() => {
     let cancelled = false;
     notificationStore
       .load()
-      .then(value => { if (!cancelled) setChoice(value); })
+      .then(value => {
+        if (cancelled) return;
+        setChoice(value);
+        // Profile may have turned notifications on after the OS card was shown.
+        if (value === "on") setDenied(false);
+      })
       .catch(() => { if (!cancelled) setChoice(null); });
     return () => { cancelled = true; };
-  }, []);
+  }, []));
 
   if (choice === undefined || !availability.available) return null;
   const offer = shouldOfferNotifications({ choice, available: availability.available, signedIn: true });
@@ -57,7 +65,9 @@ export function NotificationOffer() {
     setBusy(true);
     setError(null);
     try {
-      await notificationStore.save("off");
+      // Not now is the same choice as the Profile switch: store "off" and
+      // unregister any cached token, rather than only writing the preference.
+      await disableNotifications(api);
       setChoice("off");
       setDenied(false);
     } catch {

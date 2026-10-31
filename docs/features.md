@@ -522,10 +522,12 @@ half.
 
 - **Permission**: after the first successful sign-in the queue shows a card
   explaining "We'll tell you when your week of posts is ready". Only **Turn on
-  notifications** asks the OS; **Not now** is stored in the same keychain used
-  for the session (`expo-secure-store`) and is not shown again. The explanation
-  is hidden in Expo Go, on simulators and when the build has no EAS project id,
-  because no token can be obtained there.
+  notifications** asks the OS; **Not now** stores the choice in the same keychain
+  used for the session (`expo-secure-store`) and unregisters any cached token, so
+  it behaves like the Profile switch. The card re-reads the stored choice every
+  time the queue regains focus, so turning notifications on in Profile removes it
+  without a relaunch. The explanation is hidden in Expo Go, on simulators and
+  when the build has no EAS project id, because no token can be obtained there.
 - **Registration**: the app lazily requires `expo-notifications` and
   `expo-device` (Expo Go and Jest still start). It reads the project id from
   `Constants.expoConfig?.extra?.eas?.projectId` or `Constants.easConfig?.projectId`
@@ -533,22 +535,29 @@ half.
   `POST /api/mobile/push-tokens` with
   `{token, platform: "ios"|"android"}`. A signed-in launch with notifications on
   refreshes the token. Sign-out calls `DELETE /api/mobile/push-tokens`
-  best-effort before revoking the session.
+  best-effort before revoking the session. If a relaunch cleared the in-memory
+  token, turning notifications off stores a pending marker; the next launch or
+  sign-out obtains the token and removes the registration once it can, and keeps
+  the marker while the OS still cannot provide one.
 - **Deep link**: a notification tap parses
   `praiseloop://queue?businessId=<id>` and checks a positive integer before
   navigating. With no session the target is kept in memory until sign-in, then
   the queue opens for that business; an id the owner does not own falls back to
-  the first business.
+  the first business. The link applies once: after it opens the queue, a focus or
+  pull-to-refresh reload keeps the business chip the owner selected instead of
+  snapping back to the old URL parameter, while a new link selects again.
 - **Settings**: the profile's Notifications section is a switch. Off unregisters
   the device and remembers the choice. On requests permission if needed and
   registers. A denied OS permission is explained with a link to system settings.
 - Covered by `mobile/__tests__/notifications.test.ts` (permission mapping and
-  denial, register/unregister calls with a mocked API, deep-link parsing and
-  routing with/without a session, the stored choice, the toggle and launch
-  refresh) and `mobile/__tests__/notificationNative.test.ts` (mocked native
-  module, project id, token cache, permission read/request). No physical device
-  was available: the OS prompt, real Expo delivery and the tap on hardware are
-  still manual checks.
+  denial, register/unregister calls with a mocked API, a pending marker when the
+  token is unavailable, deep-link parsing and routing with/without a session, the
+  stored choice, the toggle and launch refresh),
+  `mobile/__tests__/queueSelection.test.ts` (a link applies once, a refresh keeps
+  the owner's chip choice, and an unowned id is ignored) and
+  `mobile/__tests__/notificationNative.test.ts` (mocked native module, project id,
+  token cache, permission read/request). No physical device was available: the OS
+  prompt, real Expo delivery and the tap on hardware are still manual checks.
 - Owner setup, not committed: an APNs key for iOS, a Firebase/FCM project for
   Android and the EAS project id (see `mobile/README.md`). Without them the app
   says notifications are unavailable rather than failing at launch.

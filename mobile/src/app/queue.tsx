@@ -13,6 +13,7 @@ import { initials } from "../profile/identity";
 import { NotificationOffer } from "../notifications/NotificationOffer";
 import { parseBusinessId } from "../notifications/links";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
+import { selectBusinessId } from "../queue/selection";
 import { expiryNote, quotaMetMessage, usageFor } from "../queue/planSummary";
 import { noBusinessView } from "../queue/onboarding";
 import { useSession } from "../auth/SessionProvider";
@@ -81,6 +82,9 @@ export default function QueueScreen() {
   // whether that id is selectable, so another owner's id falls back to the first.
   const params = useLocalSearchParams<{ businessId?: string }>();
   const linkedBusinessId = parseBusinessId(params.businessId);
+  // The link applies once; the param stays in the route, so a later refresh must
+  // keep the business the owner tapped instead of snapping back to it.
+  const appliedLinkRef = useRef<number | null>(null);
 
   // Fetchers stay pure so the effects below only set state after an await.
   const fetchBusinesses = useCallback(() => listBusinesses(api), []);
@@ -109,8 +113,14 @@ export default function QueueScreen() {
 
   const applyBusinesses = useCallback((list: Business[]) => {
     setBusinesses(list);
-    const linked = linkedBusinessId && list.some(item => item.id === linkedBusinessId) ? linkedBusinessId : null;
-    setBusinessId(current => linked ?? current ?? list[0]?.id ?? null);
+    const selection = selectBusinessId({
+      linked: linkedBusinessId,
+      appliedLink: appliedLinkRef.current,
+      current: businessIdRef.current,
+      businesses: list
+    });
+    appliedLinkRef.current = selection.appliedLink;
+    setBusinessId(selection.businessId);
     setError(null);
   }, [linkedBusinessId]);
 

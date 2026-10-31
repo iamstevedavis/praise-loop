@@ -2,6 +2,7 @@ import { createNotificationStore, NOTIFICATION_CHOICE_KEY } from "../src/notific
 import {
   disableNotifications,
   enableNotifications,
+  PENDING_UNREGISTER_ANY_TOKEN,
   refreshPushRegistration,
   unregisterPushDevice,
   type PushDeps
@@ -75,6 +76,13 @@ describe("notification permission model", () => {
     expect(shouldOfferNotifications({ choice: "off", available: true, signedIn: true })).toBe(false);
     expect(shouldOfferNotifications({ choice: null, available: false, signedIn: true })).toBe(false);
     expect(shouldOfferNotifications({ choice: null, available: true, signedIn: false })).toBe(false);
+  });
+
+  it("hides the offer once a focus re-read sees a choice made in Profile", () => {
+    // The queue card re-reads the stored choice on every focus.
+    expect(shouldOfferNotifications({ choice: null, available: true, signedIn: true })).toBe(true);
+    expect(shouldOfferNotifications({ choice: "on", available: true, signedIn: true })).toBe(false);
+    expect(shouldOfferNotifications({ choice: "off", available: true, signedIn: true })).toBe(false);
   });
 
   it("treats Expo Go, simulators and a missing project id as unavailable", () => {
@@ -257,6 +265,57 @@ describe("notification toggle and launch refresh", () => {
     expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "POST", body: { token: TOKEN, platform: "ios" } });
     expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "DELETE", body: { token: TOKEN } });
     expect(clearPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("remembers the device without a token when notifications are turned off offline", async () => {
+    const savePending = jest.fn().mockResolvedValue(undefined);
+    const token = jest.fn().mockRejectedValue(new Error("offline"));
+    const { client } = apiMock();
+    await disableNotifications(client, deps({ cachedToken: () => null, token, savePending }));
+
+    expect(token).toHaveBeenCalledWith("project-1");
+    expect(savePending).toHaveBeenCalledWith(PENDING_UNREGISTER_ANY_TOKEN);
+  });
+
+  it("unregisters the pending marker on a later launch once a token is available", async () => {
+    const { client, request } = apiMock();
+    const clearPending = jest.fn().mockResolvedValue(undefined);
+    const token = jest.fn().mockResolvedValue(TOKEN);
+
+    await refreshPushRegistration(client, deps({
+      loadChoice: async () => "off",
+      loadPending: async () => PENDING_UNREGISTER_ANY_TOKEN,
+      cachedToken: () => null,
+      token,
+      clearPending
+    }));
+
+    expect(token).toHaveBeenCalledWith("project-1");
+    expect(request.mock.calls.map(call => call[1].method)).toEqual(["POST", "DELETE"]);
+    expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "POST", body: { token: TOKEN, platform: "ios" } });
+    expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "DELETE", body: { token: TOKEN } });
+    expect(clearPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the marker pending when a retry still cannot get a token", async () => {
+    const { client, request } = apiMock();
+    const clearPending = jest.fn().mockResolvedValue(undefined);
+    const savePending = jest.fn().mockResolvedValue(undefined);
+    const token = jest.fn().mockRejectedValue(new Error("offline"));
+
+    await refreshPushRegistration(client, deps({
+      loadChoice: async () => "off",
+      loadPending: async () => PENDING_UNREGISTER_ANY_TOKEN,
+      cachedToken: () => null,
+      token,
+      clearPending,
+      savePending
+    }));
+
+    expect(token).toHaveBeenCalledWith("project-1");
+    expect(request).not.toHaveBeenCalled();
+    expect(clearPending).not.toHaveBeenCalled();
+    expect(savePending).not.toHaveBeenCalled();
   });
 
   it("leaves the token pending when the retry fails again, and retries it on sign-out", async () => {
