@@ -32,7 +32,7 @@ Suites that use `databaseFixture` (`scripts/db-fixture.ts`) **skip silently and 
 - **Auth:** every route under `app/api` must be wrapped in `ownerRoute` (`lib/authorization.ts`), which handles NextAuth cookie sessions and hashed mobile bearer sessions, ownership checks, CSRF/origin, and upload limits. `scripts/test-authorization.ts` calls every exported route handler anonymously and expects 401, so a new route is public only if explicitly allow-listed there (e.g. `/api/mobile/config`). Routes that are owner-wide rather than business-scoped are listed in `OWNER_WIDE_PATHS`.
 - **Data access:** `lib/db.ts` `query()` transparently joins an active `transaction()` via AsyncLocalStorage, so `query` inside a transaction callback is transactional.
 - **Integrations** (`lib/integrations/`) are built against stubbed interfaces; the live scheduler/Google clients fail closed until access is approved.
-- **Migrations:** `db/migrations/NNN_name.sql`, forward-only, applied in filename order. Parallel PRs collide on the number; renumber the later one when rebasing.
+- **Migrations:** `db/migrations/NNN_name.sql`, forward-only, applied in filename order. Parallel PRs collide on the number; renumber the later one when rebasing (renumbering a file that was already applied is safe: the runner matches the name after the number).
 
 ## Repo rules
 
