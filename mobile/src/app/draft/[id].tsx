@@ -8,7 +8,10 @@ import { api } from "../../api";
 import { ApiError } from "../../api/client";
 import { captionProblem, listDrafts, regenerateDraft, saveCaption, setDraftStatus, type Draft } from "../../api/drafts";
 import { useSession } from "../../auth/SessionProvider";
+import { photoLibrary } from "../../media/photoLibrary";
 import { discardDraftImage, downloadDraftImage } from "../../posting/media";
+import { REGENERATE_CONFIRM, requestRegenerate } from "../../posting/regenerateFlow";
+import { saveToPhotos } from "../../posting/saveToPhotosFlow";
 import { confirmShared, declineShared, PASTE_HINT, prepareShare, SHARED_HINT, type ShareDeps, type ShareState } from "../../posting/shareFlow";
 import { Banner, Button, Chip } from "../../ui/components";
 import { DraftImage } from "../../ui/DraftImage";
@@ -51,6 +54,8 @@ export default function DraftScreen() {
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"caption" | "approve" | "archive" | "regenerate" | null>(null);
+  const [savingPhotos, setSavingPhotos] = useState(false);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "danger"; message: string } | null>(null);
   const [share, setShare] = useState<ShareState>({ step: "idle" });
   // Mutations and the share flow both carry a draft version, and a caption save
@@ -173,21 +178,63 @@ export default function DraftScreen() {
   }, [applyUpdate, busy, caption, draft, handleError, shareBusy]);
 
   // Asks the server for a fresh caption and image. The post is cleared and re-queued, so there is
-  // nothing useful to show here: go back to the queue, which reloads on focus and shows it being made.
+  // nothing useful to show here: after the confirmation, go back to the queue, which reloads on
+  // focus and shows it being made.
   const regenerate = useCallback(async () => {
-    if (!draft || busy || shareBusy) return;
+    if (!draft || busy || shareBusy || savingPhotos) return;
+    setConfirmRegenerate(false);
     setBusy("regenerate");
     setNotice(null);
     try {
-      await regenerateDraft(api, draft);
-      if (mounted.current) router.back();
-    } catch (error) {
-      handleError(error);
-      setNotice({ tone: "danger", message: message(error, "Couldn't start a new version.") });
+      const next = await requestRegenerate(draft, { regenerate: item => regenerateDraft(api, item) });
+      if (!mounted.current) return;
+      if (next.step === "queued") {
+        router.back();
+        return;
+      }
+      if (next.step !== "error" || !mounted.current) return;
+      if (next.reason === "signedOut") expire();
+      // A stale version (or a job that is already running) is only useful after
+      // reloading; keep the message so the owner knows why the screen changed.
+      if (next.reload) {
+        try {
+          const found = await fetchDraft();
+          if (mounted.current) applyFetched(found);
+        } catch (error) {
+          handleError(error);
+        }
+      }
+      if (mounted.current) setNotice({ tone: "danger", message: next.message });
     } finally {
-      setBusy(null);
+      if (mounted.current) setBusy(null);
     }
-  }, [busy, draft, handleError, shareBusy]);
+  }, [applyFetched, busy, draft, expire, fetchDraft, handleError, savingPhotos, shareBusy]);
+
+  // Download the same owner-protected PNG as sharing and hand it to the photo
+  // library. The permission prompt appears here, not when the screen opens.
+  const savePhotos = useCallback(async () => {
+    if (!draft || busy || shareBusy || savingPhotos) return;
+    setSavingPhotos(true);
+    setNotice(null);
+    try {
+      const next = await saveToPhotos(draft, {
+        requestPermission: () => photoLibrary.requestPermission(),
+        downloadImage: item => downloadDraftImage({ token: token ?? "", draftId: item.id, imagePath: item.image_path ?? "" }),
+        saveImage: uri => photoLibrary.saveImage(uri),
+        discardImage: discardDraftImage
+      });
+      if (!mounted.current) return;
+      if (next.step === "done") {
+        setNotice({ tone: "success", message: "Saved to Photos." });
+        return;
+      }
+      if (next.step !== "error") return;
+      setNotice({ tone: "danger", message: next.message });
+      if (next.reason === "signedOut") expire();
+    } finally {
+      if (mounted.current) setSavingPhotos(false);
+    }
+  }, [busy, draft, expire, savingPhotos, shareBusy, token]);
 
   const shareDeps = useCallback((): ShareDeps => ({
     canShare: () => Sharing.isAvailableAsync(),
@@ -272,7 +319,7 @@ export default function DraftScreen() {
   const readOnly = draft.status === "shared" || draft.status === "archived" || draft.status === "scheduled" || draft.status === "published";
   // A mutation always answers with the server's caption, so the editor must not
   // accept text that the pending response would overwrite.
-  const locked = readOnly || busy !== null || shareBusy;
+  const locked = readOnly || busy !== null || shareBusy || savingPhotos;
   const problem = captionProblem(caption);
   const canApprove = draft.status === "draft" && !problem && !!draft.image_path;
   // Same rule as the web app: a finished post waiting for approval, or one whose generation failed.
@@ -288,7 +335,7 @@ export default function DraftScreen() {
         <View style={styles.header}>
           <Button label="Back" kind="secondary" onPress={() => router.back()} />
           <View style={styles.headerRight}>
-            <Button label="Reload" kind="secondary" onPress={() => { void reload(); }} loading={loading} disabled={!!busy || shareBusy} />
+            <Button label="Reload" kind="secondary" onPress={() => { void reload(); }} loading={loading} disabled={!!busy || shareBusy || savingPhotos} />
             <Chip label={draft.status === "draft" ? "Needs approval" : draft.status === "shared" ? "Shared by you" : draft.status} tone={draft.status === "approved" ? "success" : draft.status === "draft" ? "warning" : "neutral"} />
           </View>
         </View>
@@ -331,29 +378,41 @@ export default function DraftScreen() {
           />
         ) : (
           <View style={styles.actions}>
-            <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={readOnly || !!busy || shareBusy} />
+            <Button label="Save caption" onPress={() => { void save(); }} loading={busy === "caption"} disabled={readOnly || !!busy || shareBusy || savingPhotos} />
             {draft.status === "draft" ? (
               <>
-                <Button label="Approve" onPress={() => { void changeStatus("approved"); }} loading={busy === "approve"} disabled={!canApprove || !!busy} />
+                <Button label="Approve" onPress={() => { void changeStatus("approved"); }} loading={busy === "approve"} disabled={!canApprove || !!busy || savingPhotos} />
                 {!canApprove ? <Text style={styles.hint}>{problem ?? "A post needs an image before it can be approved."}</Text> : null}
               </>
             ) : null}
             {draft.status === "approved" ? (
               <>
-                <Button label={preparing ? "Preparing…" : "Post"} onPress={() => { void post(); }} loading={preparing} disabled={captionDirty || !!busy} />
+                <Button label={preparing ? "Preparing…" : "Post"} onPress={() => { void post(); }} loading={preparing} disabled={captionDirty || !!busy || savingPhotos} />
+                <Button label="Save to Photos" kind="secondary" onPress={() => { void savePhotos(); }} loading={savingPhotos} disabled={!!busy || shareBusy} />
                 <Text style={styles.hint}>{captionDirty ? "Save your caption changes, then approve this post again before sharing it." : PASTE_HINT}</Text>
               </>
             ) : null}
             {canRegenerate ? (
               <>
-                <Button label="Make a new version" kind="secondary" onPress={() => { void regenerate(); }} loading={busy === "regenerate"} disabled={captionDirty || !!busy || shareBusy} />
+                <Button label="Make a new version" kind="secondary" onPress={() => setConfirmRegenerate(true)} loading={busy === "regenerate"} disabled={captionDirty || !!busy || shareBusy || savingPhotos} />
                 <Text style={styles.hint}>{captionDirty ? "Save your caption changes first." : "Replaces the caption and image with a fresh version and clears approval."}</Text>
               </>
             ) : null}
-            <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy} />
+            <Button label="Archive" kind="secondary" onPress={() => { void changeStatus("archived"); }} loading={busy === "archive"} disabled={!!busy || savingPhotos} />
           </View>
         )}
       </ScrollView>
+
+      <Modal visible={confirmRegenerate} transparent animationType="fade" onRequestClose={() => setConfirmRegenerate(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Make a new version?</Text>
+            <Text style={styles.modalBody}>{REGENERATE_CONFIRM}</Text>
+            <Button label="Yes, make a new version" onPress={() => { void regenerate(); }} />
+            <Button label="Cancel" kind="secondary" onPress={() => setConfirmRegenerate(false)} />
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={share.step === "confirm" || share.step === "saving"} transparent animationType="fade" onRequestClose={dismissShare}>
         <View style={styles.modalBackdrop}>

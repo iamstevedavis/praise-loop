@@ -27,6 +27,15 @@ const googlePlugins: NonNullable<ExpoConfig["plugins"]> = googleIosUrlScheme
   ? [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }]]
   : [];
 
+// Saving an approved post asks for photo-library access only when the owner taps
+// Save to Photos, and only for adding photos. The plugin supplies the iOS usage
+// strings and the Android media permission at prebuild.
+const mediaLibraryPlugin: NonNullable<ExpoConfig["plugins"]>[number] = ["expo-media-library", {
+  photosPermission: "PraiseLoop saves the posts you approve to your photo library when you ask it to.",
+  savePhotosPermission: "PraiseLoop saves the posts you approve to your photo library when you tap Save to Photos.",
+  granularPermissions: ["photo"]
+}];
+
 // Bundle ID / package name must be confirmed by the owner before store setup (#91).
 const bundleIdentifier = "ca.visda.praiseloop";
 
@@ -50,7 +59,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#123456"
     }
   },
-  plugins: ["expo-router", ...googlePlugins],
+  plugins: ["expo-router", mediaLibraryPlugin, ...googlePlugins],
   experiments: {
     typedRoutes: true
   },
