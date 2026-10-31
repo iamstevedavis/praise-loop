@@ -171,6 +171,15 @@ async function main() {
       writeFileSync(outside, Buffer.from([137, 80, 78, 71]));
       for (const name of ["draft-delete-b.png", "logo-delete-b.png"]) writeFileSync(join(root, name), Buffer.from([137, 80, 78, 71]));
 
+      // A file that both A and B reference (images are content-addressed, so identical posts share one).
+      writeFileSync(join(root, "shared-delete.png"), Buffer.from([137, 80, 78, 71]));
+      for (const owner of [a, b]) {
+        await client.query(
+          "INSERT INTO draft_posts(business_id,quote_text,caption_text,image_path) VALUES($1,'Synthetic shared','Synthetic shared','/api/media/shared-delete.png')",
+          [owner.businessId]
+        );
+      }
+
       const route = require("../app/api/account/route");
       const businesses = require("../app/api/businesses/route").GET;
 
@@ -219,7 +228,7 @@ async function main() {
       // B is untouched: same rows, same code, same media, still signed in.
       assert.deepEqual(await ownershipCounts(client, b.owner, [b.businessId]), beforeB);
       assert.equal(await codeCount(client, b.emails), 2);
-      for (const name of ["draft-delete-b.png", "logo-delete-b.png"]) assert.ok(existsSync(join(root, name)), `${name} remains`);
+      for (const name of ["draft-delete-b.png", "logo-delete-b.png", "shared-delete.png"]) assert.ok(existsSync(join(root, name)), `${name} remains`);
       assert.equal((await businesses(cookieRequest(b.webToken))).status, 200);
       assert.equal((await businesses(bearerRequest(b.mobileToken))).status, 200);
 
