@@ -95,9 +95,13 @@ Owner steps to create the app's OAuth clients (Google Cloud Console, Google Auth
 3. Native Google Sign-In must produce an ID token whose audience is one of these client
    IDs. The phone app sets `webClientId` from `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (the same
    value as `GOOGLE_CLIENT_ID`) and `iosClientId` from `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`.
-   On Android the token's audience is therefore the web client ID: add that ID to
-   `GOOGLE_ANDROID_CLIENT_ID`. On iOS it is the iOS client ID already in
-   `GOOGLE_IOS_CLIENT_ID`. Each variable accepts several comma-separated IDs. The app's
+   Because `webClientId` is set, the token's audience is the web client ID on both
+   platforms (the native library passes it as the server client ID). The server only
+   trusts the IDs listed in `GOOGLE_IOS_CLIENT_ID` and `GOOGLE_ANDROID_CLIENT_ID`, which
+   are one shared allowlist, so add the web client ID to at least one of them, for example
+   `GOOGLE_ANDROID_CLIENT_ID`, even if you only ship iOS. The iOS client ID itself is
+   still needed in the app (`EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`) to start the sign-in.
+   Each variable accepts several comma-separated IDs. The app's
    reverse iOS scheme goes in `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` for prebuild only
    (see `mobile/README.md`).
 
