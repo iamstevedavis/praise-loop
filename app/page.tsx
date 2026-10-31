@@ -118,7 +118,9 @@ export default function HomePage() {
         setDemoError(result.error ?? "Demo sign-in failed; try again.");
         return;
       }
-      router.replace(notice.callbackUrl ?? "/approval");
+      // Reload, as the email sign-in does: AppShell reads the session once on mount, and once it sees
+      // the new cookie the effect above sends the owner to the callback or their queue.
+      window.location.reload();
     } catch {
       setDemoError("Could not reach PraiseLoop; try again.");
     } finally { setDemoBusy(false); }
