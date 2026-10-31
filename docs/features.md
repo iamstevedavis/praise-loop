@@ -438,7 +438,8 @@ draft from the queue and coming back still works.
   short "weekly limit reached" message that explains an empty week.
 - **This app**: the app version and the API server it is talking to, for support
   and for the demo stack.
-- **Notifications**: a placeholder row; the toggle arrives with #89.
+- **Notifications**: a real toggle for the weekly reminder; see
+  [Phone notifications](#phone-notifications-89) below.
 - **Sign out**: revokes the session on the server, clears the stored token and
   returns to sign-in.
 - Profile, plan and method requests are best-effort. A failure shows a retry on
@@ -512,6 +513,48 @@ typing `DELETE` before the button works.
   checked) and is in the `npm test` chain.
 - Rollback: no schema change is involved. Restoring a deleted account is not
   possible; stop deploying the route to disable the feature.
+
+## Phone notifications (#89)
+
+Push is the weekly way back into the app: the worker sends "posts are ready" for
+a business (#88) with a deep link to that business's queue. #89 adds the phone
+half.
+
+- **Permission**: after the first successful sign-in the queue shows a card
+  explaining "We'll tell you when your week of posts is ready". Only **Turn on
+  notifications** asks the OS; **Not now** is stored in the same keychain used
+  for the session (`expo-secure-store`) and is not shown again. The explanation
+  is hidden in Expo Go, on simulators and when the build has no EAS project id,
+  because no token can be obtained there.
+- **Registration**: the app lazily requires `expo-notifications` and
+  `expo-device` (Expo Go and Jest still start). It reads the project id from
+  `Constants.expoConfig?.extra?.eas?.projectId` or `Constants.easConfig?.projectId`
+  (`app.config.ts` fills the former from `EXPO_PUBLIC_EAS_PROJECT_ID`) and calls
+  `POST /api/mobile/push-tokens` with
+  `{token, platform: "ios"|"android"}`. A signed-in launch with notifications on
+  refreshes the token. Sign-out calls `DELETE /api/mobile/push-tokens`
+  best-effort before revoking the session.
+- **Deep link**: a notification tap parses
+  `praiseloop://queue?businessId=<id>` and checks a positive integer before
+  navigating. With no session the target is kept in memory until sign-in, then
+  the queue opens for that business; an id the owner does not own falls back to
+  the first business.
+- **Settings**: the profile's Notifications section is a switch. Off unregisters
+  the device and remembers the choice. On requests permission if needed and
+  registers. A denied OS permission is explained with a link to system settings.
+- Covered by `mobile/__tests__/notifications.test.ts` (permission mapping and
+  denial, register/unregister calls with a mocked API, deep-link parsing and
+  routing with/without a session, the stored choice, the toggle and launch
+  refresh) and `mobile/__tests__/notificationNative.test.ts` (mocked native
+  module, project id, token cache, permission read/request). No physical device
+  was available: the OS prompt, real Expo delivery and the tap on hardware are
+  still manual checks.
+- Owner setup, not committed: an APNs key for iOS, a Firebase/FCM project for
+  Android and the EAS project id (see `mobile/README.md`). Without them the app
+  says notifications are unavailable rather than failing at launch.
+- Rollback: remove the notification modules, the queue card and the profile
+  section; the preference key and server tokens are ordinary local/API state,
+  and removing a token from the server simply stops deliveries.
 
 ## Demo owner picker (#154)
 

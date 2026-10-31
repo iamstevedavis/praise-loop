@@ -58,7 +58,7 @@ share-sheet flow (`#87`) and the profile screen (`#151`), reached from the initi
 avatar in the queue header. The profile shows the owner's name and email (the name
 is editable, the email is not), the linked sign-in methods (link Google, or
 unlink one after a confirmation while another remains), the plan and this week's
-usage, the app version and API server, and **Sign out**. Sign-in is **Continue
+usage, the notification toggle, the app version and API server, and **Sign out**. Sign-in is **Continue
 with Google** in a development or store build (#85/#81); the same screen always
 offers an email-code option, and a development server with `MOBILE_DEV_AUTH=1`
 also offers a demo owner, which is the fastest way to walk the whole flow with
@@ -82,6 +82,45 @@ Instagram. `shared` is owner-reported, never inferred. Queue thumbnails and the
 draft image use the same authenticated download into the app cache, because the
 core React Native `Image` does not reliably send custom headers in Expo Go.
 
+## Push notifications
+
+The weekly "posts are ready" reminder is an Expo push notification. After the
+first successful sign-in the queue shows a short explanation with **Turn on
+notifications** and **Not now**; only **Turn on** asks the OS. The choice is
+stored in the same keychain storage as the session (`expo-secure-store`), so
+**Not now** is not shown again. The profile screen has the same setting as a
+switch: off unregisters the device, on requests permission if needed and
+registers it. If the OS has denied permission, the screen explains how to turn
+it on in system settings. Signing out unregisters the token best-effort before
+the session is revoked. On every signed-in launch with notifications on, the
+app refreshes its token with `POST /api/mobile/push-tokens`.
+
+Tapping a notification opens `praiseloop://queue?businessId=<id>`. The app
+validates the id as a positive integer, signs in first when there is no session,
+then opens that business's queue; an id the owner does not own falls back to the
+first business. The token endpoint and payload shape come from #88.
+
+Push needs all of the following, and the app says plainly when one is missing:
+
+- a **development or store build** on a physical iOS or Android phone. Expo Go
+  and simulators cannot obtain an Expo push token.
+- an **EAS project id**, read from `Constants.expoConfig?.extra?.eas?.projectId`
+  or `Constants.easConfig?.projectId`. Set `EXPO_PUBLIC_EAS_PROJECT_ID` to place
+  it in `extra.eas.projectId`, or let an EAS update manifest supply
+  `easConfig.projectId`. Without it the push setting is disabled with a "not
+  configured for this build" note. The id is public, not a secret.
+- **owner provider credentials**, not committed to this repo:
+  - iOS: an APNs authentication key (`.p8`, key id and team id) uploaded to the
+    Expo project, or EAS-managed credentials.
+  - Android: a Firebase/FCM project with `google-services.json` and FCM
+    credentials attached to the Expo project.
+
+`expo-notifications` and `expo-device` are required lazily, so Expo Go and Jest
+still start and the push UI stays hidden where a token cannot exist. No physical
+device test has been run for this work: the tests mock the native module and the
+API, and the real notification delivery, OS permission sheet and deep link on
+hardware are still owner checks.
+
 ## Checks
 
 ```bash
@@ -100,7 +139,10 @@ and the 401 path), the profile helpers and API wrapper (name rule, initials,
 400/401), the sign-in method helpers and API wrapper (provider names, added
 dates, the unlink rule, link/unlink success, 400/409 and 401), and every
 share-flow branch (unavailable share sheet, download/copy/share failures,
-cancelled share, version conflict, expired session).
+cancelled share, version conflict, expired session). Push coverage adds permission mapping and denial,
+register/unregister payloads and calls against a mocked API, Expo Go/simulator
+availability, deep-link parsing and routing with and without a session, the stored
+choice and the settings toggle.
 
 ## Builds
 
