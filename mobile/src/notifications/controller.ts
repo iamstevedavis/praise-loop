@@ -181,7 +181,14 @@ export function refreshPushRegistration(client: PushApi, deps: Partial<PushDeps>
 // Turning the toggle off sticks even when the network or the OS call fails.
 async function disableNotificationsNow(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
   const d = resolveDeps(deps);
+  // Only a device that may be registered needs cleaning up: "Not now" on a first-time offer never
+  // registered anything, and must not leave a pending marker behind.
+  const mayBeRegistered = d.cachedToken() !== null || await d.loadChoice().then(choice => choice === "on", () => false);
   await d.saveChoice("off");
+  if (!mayBeRegistered) {
+    d.forgetToken();
+    return;
+  }
   try {
     await unregisterCurrentDevice(client, d);
   } catch {
