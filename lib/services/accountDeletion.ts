@@ -56,6 +56,18 @@ export async function olderImageVersions(draftIds: Set<string>, root = mediaRoot
   }
 }
 
+// The names no remaining draft image or business logo points at.
+async function unreferenced(names: string[]): Promise<string[]> {
+  if (!names.length) return names;
+  const used = await query<{ path: string }>(
+    `SELECT image_path AS path FROM draft_posts WHERE image_path = ANY($1::text[])
+     UNION SELECT logo_url AS path FROM businesses WHERE logo_url = ANY($1::text[])`,
+    [names.map(name => `/api/media/${name}`)]
+  );
+  const keep = new Set(used.rows.map(row => mediaFilename(row.path)));
+  return names.filter(name => !keep.has(name));
+}
+
 // Everything the owner owns goes in one transaction, so a failure leaves the
 // account intact. Existing ON DELETE CASCADE covers reviews, drafts, events,
 // jobs, periods, slot claims, push deliveries and the auth tables; only the
@@ -103,20 +115,6 @@ export async function deleteOwnerAccount(
     await query("DELETE FROM businesses WHERE owner_id=$1", [ownerId]);
     await query("DELETE FROM auth_users WHERE id=$1", [ownerId]);
 
-    // Rendered images are content-addressed, so another owner's draft or logo can point at the same
-    // file. Keep any file that is still referenced after this owner's rows are gone.
-    if (media.size) {
-      const paths = [...media].map(name => `/api/media/${name}`);
-      const stillUsed = await query<{ path: string }>(
-        `SELECT image_path AS path FROM draft_posts WHERE image_path = ANY($1::text[])
-         UNION SELECT logo_url AS path FROM businesses WHERE logo_url = ANY($1::text[])`,
-        [paths]
-      );
-      for (const row of stillUsed.rows) {
-        const name = mediaFilename(row.path);
-        if (name) media.delete(name);
-      }
-    }
     return [...media];
   });
 
@@ -127,7 +125,9 @@ export async function deleteOwnerAccount(
     // disk with no row pointing at them. Their names carry the draft id, which belongs to this
     // owner alone, so sweep those too.
     for (const name of await olderImageVersions(draftIds)) if (!names.includes(name)) names.push(name);
-    await remove(names);
+    // Another owner's draft or logo can point at one of these files, so keep every file that is still
+    // referenced after this owner's rows are gone, whichever way it was found.
+    await remove(await unreferenced(names));
   } catch {
     console.error("account_deletion_media_cleanup_failed", { files: names.length });
   }
