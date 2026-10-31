@@ -145,8 +145,19 @@ async function enableNotificationsNow(client: PushApi, deps: Partial<PushDeps> =
       return { status: "denied" };
     }
     const token = await d.token(availability.projectId);
-    await registerPushToken(client, token, d.platform());
-    await d.saveChoice("on");
+    try {
+      await registerPushToken(client, token, d.platform());
+      await d.saveChoice("on");
+    } catch (error) {
+      // The POST may have reached the server even though the answer was lost (or saving the choice
+      // failed afterwards). Remember the token so the next launch or sign-out removes the
+      // registration instead of leaving the device receiving notifications the owner never saw
+      // switch on.
+      await rememberPending(d, token);
+      throw error;
+    }
+    // Enabled for good: any earlier pending cleanup of this device no longer applies.
+    await d.clearPending().catch(() => undefined);
     return { status: "on" };
   } catch {
     return { status: "failed" };
