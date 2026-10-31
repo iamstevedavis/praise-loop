@@ -180,6 +180,12 @@ async function main() {
         );
       }
 
+      // B's draft points at one of A's superseded renders: deleting A must keep that file.
+      await client.query(
+        "INSERT INTO draft_posts(business_id,quote_text,caption_text,image_path) VALUES($1,'Synthetic ref','Synthetic ref',$2)",
+        [b.businessId, `/api/media/draft-${a.draftIds[0]}-0123456789abcdef0123.png`]
+      );
+
       // Superseded renders of A's and B's drafts: no row points at them, but the names carry the draft id.
       for (const owner of [a, b]) {
         for (const suffix of ["-0123456789abcdef0123", "-fedcba98765432100123"]) {
@@ -242,9 +248,10 @@ async function main() {
       // A's files are gone; the failed directory removal did not fail the request,
       // and the traversal target outside MEDIA_ROOT was never touched.
       for (const name of ["draft-delete-a.png", "logo-delete-a.png"]) assert.equal(existsSync(join(root, name)), false, `${name} removed`);
+      assert.equal(existsSync(join(root, `draft-${a.draftIds[0]}-fedcba98765432100123.png`)), false, "A's older image version removed");
+      assert.ok(existsSync(join(root, `draft-${a.draftIds[0]}-0123456789abcdef0123.png`)), "an older version B's draft still uses remains");
       for (const suffix of ["-0123456789abcdef0123", "-fedcba98765432100123"]) {
-        assert.equal(existsSync(join(root, `draft-${a.draftIds[0]}${suffix}.png`)), false, "A's older image version removed");
-        assert.ok(existsSync(join(root, `draft-${b.draftIds[0]}${suffix}.png`)), "B's older image version remains");
+        assert.ok(existsSync(join(root, `draft-${b.draftIds[0]}${suffix}.png`)), "B's own older image version remains");
       }
       assert.ok(existsSync(join(root, "draft-dir-delete-a.png")), "unremovable path left the request successful");
       assert.ok(existsSync(outside), "path traversal target remains");
