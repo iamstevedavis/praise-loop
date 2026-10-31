@@ -41,6 +41,10 @@ async function main() {
     writeFileSync(orphan,"x"); writeFileSync(kept,"x");
     assert.equal(await discardOrphanRender(2147483000,orphan),true); assert.equal(existsSync(orphan),false);
     assert.equal(await discardOrphanRender(Number(jobs[0].draft_id),kept),false); assert.equal(existsSync(kept),true);
+    // A file another row still points at is kept even though this draft is gone.
+    const shared = join(renderDir,"shared.png"); writeFileSync(shared,"x");
+    await client.query("UPDATE draft_posts SET image_path=$2 WHERE id=$1",[jobs[0].draft_id,"/api/media/shared.png"]);
+    assert.equal(await discardOrphanRender(2147483000,shared,"/api/media/shared.png"),false); assert.equal(existsSync(shared),true);
     rmSync(renderDir,{recursive:true,force:true});
     const second = Number(jobs[1].id);
     await client.query("UPDATE generation_jobs SET state='running',attempts=1,lease='dead-process',lease_until=$2 WHERE id=$1",[second,new Date(now.getTime()-1000)]);
