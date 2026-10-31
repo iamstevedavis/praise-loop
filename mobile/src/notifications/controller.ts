@@ -28,6 +28,11 @@ export type PushDeps = {
   platform: () => PushPlatform;
   loadChoice: () => Promise<NotificationChoice | null>;
   saveChoice: (choice: NotificationChoice) => Promise<void>;
+  // A token whose unregister request failed. The server keeps sending to a registered token no
+  // matter what this phone's preference says, so the DELETE is retried until it succeeds.
+  loadPending: () => Promise<string | null>;
+  savePending: (token: string) => Promise<void>;
+  clearPending: () => Promise<void>;
 };
 
 export const defaultPushDeps: PushDeps = {
@@ -39,11 +44,36 @@ export const defaultPushDeps: PushDeps = {
   forgetToken: forgetPushToken,
   platform: currentPlatform,
   loadChoice: () => notificationStore.load(),
-  saveChoice: choice => notificationStore.save(choice)
+  saveChoice: choice => notificationStore.save(choice),
+  loadPending: () => notificationStore.loadPending(),
+  savePending: token => notificationStore.savePending(token),
+  clearPending: () => notificationStore.clearPending()
 };
 
 function resolveDeps(deps: Partial<PushDeps>): PushDeps {
   return { ...defaultPushDeps, ...deps };
+}
+
+// Retries an unregister that failed earlier. Best effort: if it fails again the token stays pending.
+export async function retryPendingUnregister(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
+  const d = resolveDeps(deps);
+  try {
+    const pending = await d.loadPending();
+    if (!pending) return;
+    await unregisterPushToken(client, pending);
+    await d.clearPending();
+  } catch {
+    // Still pending; the next launch or sign-out tries again.
+  }
+}
+
+// Unregisters a token and remembers it if the request fails.
+async function unregisterOrKeepPending(client: PushApi, d: PushDeps, token: string): Promise<void> {
+  try {
+    await unregisterPushToken(client, token);
+  } catch {
+    try { await d.savePending(token); } catch { /* nothing more to do */ }
+  }
 }
 
 // Only an explicit "Turn on" reaches the OS prompt. A refusal is remembered so
@@ -73,6 +103,7 @@ export async function enableNotifications(client: PushApi, deps: Partial<PushDep
 // It never prompts; a revoked permission simply leaves the device unregistered.
 export async function refreshPushRegistration(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
   const d = resolveDeps(deps);
+  await retryPendingUnregister(client, d);
   try {
     if (await d.loadChoice() !== "on") return;
     const availability = d.availability();
@@ -95,7 +126,7 @@ export async function disableNotifications(client: PushApi, deps: Partial<PushDe
       const availability = d.availability();
       if (availability.available) token = await d.token(availability.projectId);
     }
-    if (token) await unregisterPushToken(client, token);
+    if (token) await unregisterOrKeepPending(client, d, token);
   } catch {
     // The local preference is already off.
   } finally {
@@ -107,6 +138,7 @@ export async function disableNotifications(client: PushApi, deps: Partial<PushDe
 // preference itself is kept so the next sign-in can register again.
 export async function unregisterPushDevice(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
   const d = resolveDeps(deps);
+  await retryPendingUnregister(client, d);
   try {
     // Notifications off (or never chosen) means there is nothing registered;
     // do not wake the OS just to ask for a token during sign-out.
@@ -116,7 +148,7 @@ export async function unregisterPushDevice(client: PushApi, deps: Partial<PushDe
       const availability = d.availability();
       if (availability.available) token = await d.token(availability.projectId);
     }
-    if (token) await unregisterPushToken(client, token);
+    if (token) await unregisterOrKeepPending(client, d, token);
   } catch {
     // Sign-out clears the local session regardless.
   } finally {

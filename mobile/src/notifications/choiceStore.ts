@@ -4,6 +4,8 @@ import type { NotificationChoice } from "./model";
 // Same keychain-backed storage as the session token; the preference is not a
 // secret, but reusing the existing storage avoids another dependency.
 export const NOTIFICATION_CHOICE_KEY = "praiseloop.mobile.notifications";
+// A push token whose DELETE failed (for example while offline), kept so it can be retried.
+export const PENDING_UNREGISTER_KEY = "praiseloop.mobile.notifications.pending";
 
 export function createNotificationStore(storage: SecureStorage) {
   let cached: NotificationChoice | null | undefined;
@@ -19,6 +21,15 @@ export function createNotificationStore(storage: SecureStorage) {
     async save(choice: NotificationChoice): Promise<void> {
       await storage.setItemAsync(NOTIFICATION_CHOICE_KEY, choice);
       cached = choice;
+    },
+    async loadPending(): Promise<string | null> {
+      return (await storage.getItemAsync(PENDING_UNREGISTER_KEY)) || null;
+    },
+    async savePending(token: string): Promise<void> {
+      await storage.setItemAsync(PENDING_UNREGISTER_KEY, token);
+    },
+    async clearPending(): Promise<void> {
+      await storage.deleteItemAsync(PENDING_UNREGISTER_KEY);
     },
     async clear(): Promise<void> {
       cached = null;

@@ -44,6 +44,9 @@ function deps(overrides: Partial<PushDeps> = {}): PushDeps {
     platform: () => "ios",
     loadChoice: async () => "on",
     saveChoice: jest.fn().mockResolvedValue(undefined),
+    loadPending: async () => null,
+    savePending: jest.fn().mockResolvedValue(undefined),
+    clearPending: jest.fn().mockResolvedValue(undefined),
     ...overrides
   };
 }
@@ -237,6 +240,31 @@ describe("notification toggle and launch refresh", () => {
       body: { token: TOKEN }
     });
     expect(forgetToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a failed unregister pending and retries it on the next launch, even with notifications off", async () => {
+    const failing = jest.fn().mockRejectedValue(new Error("offline"));
+    const savePending = jest.fn().mockResolvedValue(undefined);
+    await disableNotifications({ request: failing } as unknown as PushApi, deps({ cachedToken: () => TOKEN, savePending }));
+    expect(savePending).toHaveBeenCalledWith(TOKEN);
+
+    const { client, request } = apiMock();
+    const clearPending = jest.fn().mockResolvedValue(undefined);
+    await refreshPushRegistration(client, deps({ loadChoice: async () => "off", loadPending: async () => TOKEN, clearPending }));
+    expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "DELETE", body: { token: TOKEN } });
+    expect(clearPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the token pending when the retry fails again, and retries it on sign-out", async () => {
+    const clearPending = jest.fn().mockResolvedValue(undefined);
+    const failing = jest.fn().mockRejectedValue(new Error("offline"));
+    await refreshPushRegistration({ request: failing } as unknown as PushApi, deps({ loadChoice: async () => "off", loadPending: async () => TOKEN, clearPending }));
+    expect(clearPending).not.toHaveBeenCalled();
+
+    const { client, request } = apiMock();
+    await unregisterPushDevice(client, deps({ loadChoice: async () => "off", loadPending: async () => TOKEN, clearPending }));
+    expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "DELETE", body: { token: TOKEN } });
+    expect(clearPending).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes the token on launch only when notifications are on and permission is granted", async () => {
