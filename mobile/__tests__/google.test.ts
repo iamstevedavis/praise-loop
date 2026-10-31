@@ -47,6 +47,16 @@ describe("native Google sign-in", () => {
     expect(googleSignInAvailable()).toBe(true);
   });
 
+  it("needs the iOS client id on iOS only", () => {
+    const fakeModule = {
+      GoogleSignin,
+      statusCodes: { SIGN_IN_CANCELLED: "SIGN_IN_CANCELLED" }
+    } as unknown as Parameters<typeof googleSignInAvailable>[0];
+    expect(googleSignInAvailable(fakeModule, "web-client", "", "ios")).toBe(false);
+    expect(googleSignInAvailable(fakeModule, "web-client", "ios-client", "ios")).toBe(true);
+    expect(googleSignInAvailable(fakeModule, "web-client", "", "android")).toBe(true);
+  });
+
   it("configures the clients and returns the ID token", async () => {
     signIn.mockResolvedValue({ type: "success", data: { idToken: "google-id-token" } });
 

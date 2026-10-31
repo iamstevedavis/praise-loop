@@ -25,13 +25,17 @@ function loadNativeModule(): GoogleSignInModule | null {
   }
 }
 
-// `module` and `webClientId` are injectable for tests; normal callers use the
-// native module and the build's configured web client.
+// The arguments are injectable for tests; normal callers use the native module and the
+// build's configuration. Android needs only the web client; iOS also needs its own client id
+// (there is no GoogleService-Info.plist fallback here), so the button stays hidden without it.
 export function googleSignInAvailable(
   module: GoogleSignInModule | null = loadNativeModule(),
-  webClientId: string = appConfig.googleWebClientId
+  webClientId: string = appConfig.googleWebClientId,
+  iosClientId: string = appConfig.googleIosClientId,
+  platform: string = Platform.OS
 ): boolean {
-  return module !== null && webClientId.length > 0;
+  if (module === null || webClientId.length === 0) return false;
+  return platform !== "ios" || iosClientId.length > 0;
 }
 
 function cancelledByUser(error: unknown, module: GoogleSignInModule): boolean {
