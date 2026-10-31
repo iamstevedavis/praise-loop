@@ -53,8 +53,10 @@ export async function requestGeneration(businessId: number, limit = 5, now = new
 // Removes a freshly rendered file when its draft no longer exists, so a render that was in flight when
 // the account was deleted does not leave the owner's content on disk. A file whose draft still exists
 // is kept.
-export async function discardOrphanRender(draftId:number,file:string){
+export async function discardOrphanRender(draftId:number,file:string,publicPath?:string){
   if ((await query("SELECT 1 FROM draft_posts WHERE id=$1",[draftId])).rowCount) return false;
+  // Identical content renders to the same name, so another owner's draft or logo may point at this file.
+  if (publicPath && (await query("SELECT 1 FROM draft_posts WHERE image_path=$1 UNION SELECT 1 FROM businesses WHERE logo_url=$1",[publicPath])).rowCount) return false;
   await rm(file,{force:true}).catch(()=>undefined);
   return true;
 }
@@ -86,7 +88,7 @@ export async function processGeneration(id: number, deps: GenerationDeps = defau
       if (!saved.rowCount) {
         // The draft was deleted while this render was in flight (account deletion): nothing will ever
         // point at the file, and it holds the owner's business name and review text, so remove it.
-        if (typeof image.fileSystemPath === "string") await discardOrphanRender(row.id,image.fileSystemPath);
+        if (typeof image.fileSystemPath === "string") await discardOrphanRender(row.id,image.fileSystemPath,image.publicPath);
         return false;
       }
     }
