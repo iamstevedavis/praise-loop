@@ -338,10 +338,9 @@ profile screen (#151), so the two cannot disagree.
 
 One owner can have several sign-in methods, but every path uses one rule: the
 provider plus its stable subject is the identity, never the email alone. Google
-and Apple's real verified addresses may still link an owner that has the same
+and our own email codes may still link an owner that has the same verified
 address but no row for that provider; a different subject on an already-linked
-address is rejected, as before (#116/#117). Apple's private relay address never
-links by email. A provider whose email claim is not guaranteed verified
+address is rejected, as before (#116/#117). Apple never links by email. A provider whose email claim is not guaranteed verified
 (Microsoft later) creates a new owner instead of linking by email. A signed-in owner can
 link another method from `/account` or the phone profile even when the emails
 differ, and the last method cannot be unlinked. The phone links Google from the
@@ -406,8 +405,8 @@ and keeps only our bearer token in the keychain.
   identity token (and the first-sign-in name, if any) to
   `POST /api/mobile/session/apple`, and keeps only our bearer token. Cancelling
   the Apple sheet is also a quiet no-op. The server verifies Apple's signature,
-  issuer, expiry and `APPLE_CLIENT_ID`; a private-relay address never links to an
-  existing owner by email.
+  issuer, expiry and `APPLE_CLIENT_ID`; Apple never links to an existing owner by
+  email (link it from a signed-in session instead).
 - Expo Go hides the Google and Apple buttons and keeps the dev-only demo owner
   and the email-code sign-in. Android hides Apple because the module and the
   platform do not offer it.
