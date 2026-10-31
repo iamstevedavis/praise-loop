@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router } from "expo-router";
 import { api } from "../api";
+import { deleteAccount } from "../api/account";
 import { ApiError, bestEffort } from "../api/client";
 import { fetchEntitlements, type Entitlements } from "../api/entitlements";
 import { linkGoogleMethod, listAuthMethods, unlinkAuthMethod, type AuthMethod } from "../api/methods";
@@ -10,6 +11,12 @@ import { fetchProfile, NAME_MAX_LENGTH, saveName, type Profile } from "../api/pr
 import { googleSignInAvailable, isGoogleSignInCancelled, signInWithGoogle } from "../auth/google";
 import { useSession } from "../auth/SessionProvider";
 import { appConfig } from "../config";
+import {
+  DELETE_ACCOUNT_SUBSCRIPTION_NOTE,
+  DELETE_ACCOUNT_WARNING,
+  confirmsDeletion,
+  deletionErrorMessage
+} from "../profile/accountDeletion";
 import { canUnlinkMethod, displayName, initials, methodAdded, methodName, nameActionLabel, nameProblem } from "../profile/identity";
 import { planLines, planUsageLines } from "../queue/planSummary";
 import { Avatar, Banner, Button, Chip, Section } from "../ui/components";
@@ -50,6 +57,10 @@ export default function ProfileScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deletingRef = useRef(false);
 
   // Pure fetches, so the effect below only sets state after its await. The
   // requests settle independently: a profile failure must not discard a plan or
@@ -185,6 +196,26 @@ export default function ProfileScreen() {
       setSigningOut(false);
     }
   }, [signOut]);
+
+  const removeAccount = useCallback(async () => {
+    if (!confirmsDeletion(deleteText) || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount(api);
+      // The server deleted this session with the account. The normal sign-out
+      // still clears the keychain and ignores the now-401 revoke call.
+      await signOut();
+    } catch (cause) {
+      const problem = deletionErrorMessage(cause);
+      if (problem === null) handleError(cause);
+      else setDeleteError(problem);
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
+    }
+  }, [deleteText, handleError, signOut]);
 
   if (status === "signedOut") return <Redirect href="/sign-in" />;
 
@@ -375,6 +406,31 @@ export default function ProfileScreen() {
         <Section title="This app">
           <Text style={styles.body}>Version {appConfig.version} ({appConfig.variant})</Text>
           <Text style={styles.body}>Server: {appConfig.apiBaseUrl || "not configured"}</Text>
+        </Section>
+
+        <Section title="Delete account">
+          <Text style={styles.body}>{DELETE_ACCOUNT_WARNING}</Text>
+          <Text style={styles.hint}>{DELETE_ACCOUNT_SUBSCRIPTION_NOTE}</Text>
+          <TextInput
+            value={deleteText}
+            onChangeText={value => { setDeleteText(value); setDeleteError(null); }}
+            placeholder="Type DELETE to confirm"
+            accessibilityLabel="Type DELETE to confirm account deletion"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={40}
+            editable={!deleting}
+            style={styles.input}
+          />
+          {deleteError ? <Banner message={deleteError} tone="danger" /> : null}
+          <Button
+            label="Delete account"
+            kind="danger"
+            disabled={!confirmsDeletion(deleteText)}
+            loading={deleting}
+            onPress={() => { void removeAccount(); }}
+          />
+          <Text style={styles.hint}>This signs you out of the app. The account cannot be restored.</Text>
         </Section>
 
         <View style={styles.footer}>

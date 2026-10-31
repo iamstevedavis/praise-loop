@@ -60,6 +60,53 @@ MEDIA_ROOT) before restarting. Migration 007 rewrites legacy DB URLs to /api/med
 Do not expose the media directory through a reverse proxy. #29 supplies deliberate
 provider-fetchable media; guessing draft IDs never grants publication access.
 
+## Deleting an account (#93)
+
+`DELETE /api/account` is owner-wide (listed in `OWNER_WIDE_PATHS`, not
+business-scoped) and works with both the NextAuth cookie and a mobile bearer
+session. It requires a JSON body of `{"confirm": "DELETE"}`; a missing or
+different value is a `400` and no row or file is touched. Cookie requests still
+need the same Origin as `NEXTAUTH_URL`, exactly like every other cookie write;
+bearer requests skip the Origin check because a browser never attaches the token.
+The successful response is `200 {"ok": true}`, and a cookie session also gets
+both session-cookie names expired.
+
+One transaction (`lib/services/accountDeletion.ts`, using `lib/db.ts`'s
+transaction-aware `query`) locks the owner row and deletes:
+
+- `businesses` for the owner, cascading reviews, drafts, draft events, generation
+  periods and jobs, posting-slot claims, push deliveries, and Google connections;
+- `google_connections` explicitly as well, because its `owner_id` FK has no
+  cascade of its own;
+- `email_sign_in_codes` for the owner's login address and any address recorded on
+  its `auth_accounts` methods;
+- `auth_users`, cascading `auth_accounts`, `auth_sessions` (web and mobile),
+  `owner_usage`, `owner_plans`, `owner_plan_events` and `device_push_tokens`.
+
+No migration was needed: every other FK either cascades from `businesses` or
+`auth_users`, or is one of the two explicit deletes above. The deleted owner's
+cookie and bearer sessions stop working on the next request because the session
+rows are gone; a retry with the old token is `401`, not a second deletion. There
+is no soft delete, recovery period or operator restore today.
+
+**What is deleted, what is kept: nothing kept today.** The account row, profile
+name and email, every business and all its reviews, captions, quotes, drafts,
+generated images, logos, plan and usage history, push tokens, Google connection,
+sign-in methods and sessions are removed. `docs/architecture.md` carries the
+privacy-policy note.
+
+Media files are collected before the rows are deleted and removed only after the
+transaction commits. Only paths of the form `/api/media/<one filename>.png` that
+resolve inside `MEDIA_ROOT` are eligible, so data URLs and path traversal are
+ignored. A missing file is fine; a file that cannot be removed is counted in one
+sanitized `account_deletion_media_cleanup_failed` log event and does not fail the
+request after the data is gone. The cleanup helper is safe to retry. Deleting the
+account does not cancel an App Store or Google Play subscription; both confirmation
+screens say so and explain where to cancel it. `scripts/test-account-deletion.ts`
+covers owner A/B isolation, every owner/business table including an
+information-schema scan, media removal and traversal, confirmation failures,
+both session kinds, immediate 401s and cleanup retry.
+
 `TEST_DATABASE_URL=postgres://... npm test` runs disposable-schema A/B ownership,
 media, limits, expiry/revocation and cross-origin tests. Anonymous tests inventory
 all actual route exports. Older domain tests bypass the guard explicitly; boundary

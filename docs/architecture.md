@@ -89,6 +89,13 @@ Define and maintain the core stack in this section as the source of truth:
 - Never store OAuth refresh tokens unencrypted at rest
 - Do not store more customer review data than needed (quote + rating + date + source id)
 - No secrets in repo; env vars only
+- Account deletion is immediate and complete: `DELETE /api/account` removes the
+  owner, businesses, reviews, drafts, generated images, sign-in methods, plan and
+  usage records, push tokens and sessions. **What is kept: nothing today** — there
+  is no legal-retention archive, soft delete or recovery period. Generated media
+  is removed from `MEDIA_ROOT` after the database commit with a retry-safe cleanup.
+  Deleting an account does not cancel an App Store or Google Play subscription;
+  the web and phone confirmation screens tell the owner to cancel it in the store.
 
 ## Directory structure
 
