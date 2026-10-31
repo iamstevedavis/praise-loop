@@ -56,13 +56,14 @@ The app has six screens: a launch gate driven by `GET /api/mobile/config`, sign-
 an "update required" screen, the weekly queue (`#86`), a draft detail with the
 share-sheet flow (`#87`) and the profile screen (`#151`), reached from the initials
 avatar in the queue header. The profile shows the owner's name and email (the name
-is editable, the email is not), the plan and this week's usage, the app version and
-API server, and **Sign out**. Sign-in is **Continue with Google** in a
-development or store build (#85/#81); the same screen always offers an
-email-code option, and a development server with `MOBILE_DEV_AUTH=1` also offers
-a demo owner, which is the fastest way to walk the whole flow with synthetic
-data. Expo Go hides Google because the native module is absent, so demo and
-email-code sign-in are the paths there.
+is editable, the email is not), the linked sign-in methods (link Google, or
+unlink one after a confirmation while another remains), the plan and this week's
+usage, the app version and API server, and **Sign out**. Sign-in is **Continue
+with Google** in a development or store build (#85/#81); the same screen always
+offers an email-code option, and a development server with `MOBILE_DEV_AUTH=1`
+also offers a demo owner, which is the fastest way to walk the whole flow with
+synthetic data. Expo Go hides Google because the native module is absent, so
+demo and email-code sign-in are the paths there.
 
 ```bash
 # repo root
@@ -96,8 +97,10 @@ availability/cancellation, the Google token exchange (success, invalid response,
 session store, draft/version API shapes, queue list states and generation
 progress, the draft image cache (bearer header, shared downloads, retry, eviction
 and the 401 path), the profile helpers and API wrapper (name rule, initials,
-400/401), and every share-flow branch (unavailable share sheet, download/copy/
-share failures, cancelled share, version conflict, expired session).
+400/401), the sign-in method helpers and API wrapper (provider names, added
+dates, the unlink rule, link/unlink success, 400/409 and 401), and every
+share-flow branch (unavailable share sheet, download/copy/share failures,
+cancelled share, version conflict, expired session).
 
 ## Builds
 

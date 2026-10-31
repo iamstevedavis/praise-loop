@@ -1,3 +1,4 @@
+import type { AuthMethod } from "../api/methods";
 import { NAME_MAX_LENGTH, type Profile } from "../api/profile";
 
 // The same rule the server enforces in lib/services/profile.ts, so a typo is
@@ -34,4 +35,22 @@ export function initials(profile: Profile | null): string {
     .filter(Boolean);
   if (words.length === 0) return "?";
   return (words.length > 1 ? [words[0], words[words.length - 1]] : [words[0]]).join("").toUpperCase();
+}
+
+const PROVIDER_NAMES: Record<string, string> = { google: "Google", email: "Email" };
+
+// The provider as the owner knows it, matching the web page. An unknown provider
+// is shown by its stored key rather than hidden.
+export function methodName(provider: string): string {
+  return PROVIDER_NAMES[provider] ?? provider;
+}
+
+// The same wording as the web page, so the two clients describe a row alike.
+export function methodAdded(addedAt: string | null): string {
+  return addedAt ? `Added ${addedAt.slice(0, 10)}` : "Added before we tracked method dates";
+}
+
+// One method must always remain, so the last one is never offered for unlinking.
+export function canUnlinkMethod(methods: AuthMethod[] | null): boolean {
+  return methods !== null && methods.length > 1;
 }

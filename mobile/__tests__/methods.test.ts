@@ -41,8 +41,34 @@ describe("sign-in methods API", () => {
     await expect(listAuthMethods(client(200, { methods: "google" }))).rejects.toThrow(/invalid sign-in methods/i);
   });
 
+  it("replaces the list with the server's response after unlinking", async () => {
+    const email = { provider: "email", email: "owner@example.invalid", addedAt: null, lastUsedAt: null };
+    await expect(unlinkAuthMethod(client(200, { methods: [email] }), "google")).resolves.toEqual([email]);
+  });
+
+  it("replaces the list with the server's response after linking Google", async () => {
+    const email = { provider: "email", email: "owner@example.invalid", addedAt: null, lastUsedAt: null };
+    await expect(linkGoogleMethod(client(200, { methods: [google, email] }), "synthetic-id-token")).resolves.toEqual([google, email]);
+  });
+
   it("keeps the server's last-method refusal available to the caller", async () => {
     await expect(unlinkAuthMethod(client(409, { error: "Keep at least one sign-in method so you can sign in again" }), "google"))
       .rejects.toMatchObject({ kind: "conflict", status: 409, detail: "Keep at least one sign-in method so you can sign in again" });
+  });
+
+  it("shows the server's 400 message for a bad Google token", async () => {
+    await expect(linkGoogleMethod(client(400, { error: "Invalid Google sign-in" }), "bad-token"))
+      .rejects.toMatchObject({ kind: "http", status: 400, message: "Invalid Google sign-in" });
+  });
+
+  it("keeps the server's account-taken refusal on a 409", async () => {
+    await expect(linkGoogleMethod(client(409, { error: "That sign-in method already belongs to another account" }), "synthetic-id-token"))
+      .rejects.toMatchObject({ kind: "conflict", status: 409, detail: "That sign-in method already belongs to another account" });
+  });
+
+  it("maps an ended session on every call to signed out", async () => {
+    await expect(listAuthMethods(client(401))).rejects.toMatchObject({ kind: "signedOut" });
+    await expect(unlinkAuthMethod(client(401), "google")).rejects.toMatchObject({ kind: "signedOut" });
+    await expect(linkGoogleMethod(client(401), "synthetic-id-token")).rejects.toMatchObject({ kind: "signedOut" });
   });
 });

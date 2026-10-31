@@ -3,12 +3,14 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router } from "expo-router";
 import { api } from "../api";
-import { bestEffort } from "../api/client";
+import { ApiError, bestEffort } from "../api/client";
 import { fetchEntitlements, type Entitlements } from "../api/entitlements";
+import { linkGoogleMethod, listAuthMethods, unlinkAuthMethod, type AuthMethod } from "../api/methods";
 import { fetchProfile, NAME_MAX_LENGTH, saveName, type Profile } from "../api/profile";
+import { googleSignInAvailable, isGoogleSignInCancelled, signInWithGoogle } from "../auth/google";
 import { useSession } from "../auth/SessionProvider";
 import { appConfig } from "../config";
-import { displayName, initials, nameActionLabel, nameProblem } from "../profile/identity";
+import { canUnlinkMethod, displayName, initials, methodAdded, methodName, nameActionLabel, nameProblem } from "../profile/identity";
 import { planLines, planUsageLines } from "../queue/planSummary";
 import { Avatar, Banner, Button, Chip, Section } from "../ui/components";
 import { colors } from "../ui/theme";
@@ -17,12 +19,26 @@ function message(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+// A 409 keeps the server's own words in `detail` (the client's message is generic),
+// and a 400 already carries them as the message.
+function methodFailure(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.detail) return error.detail;
+  return message(error, fallback);
+}
+
 export default function ProfileScreen() {
   const { status, handleError, signOut } = useSession();
   const [profile, setProfile] = useState<Profile | null>(null);
   // Best effort, like the plan on the queue: a failed request must not hide the
   // rest of the screen, so it gets its own retry instead.
   const [plan, setPlan] = useState<Entitlements | null>(null);
+  // The same treatment for the linked methods: their own load, error and retry.
+  const [methods, setMethods] = useState<AuthMethod[] | null>(null);
+  const [methodsError, setMethodsError] = useState<string | null>(null);
+  const [methodsNotice, setMethodsNotice] = useState<string | null>(null);
+  const [methodBusy, setMethodBusy] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [planError, setPlanError] = useState(false);
@@ -35,18 +51,19 @@ export default function ProfileScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
-  // Pure fetches, so the effect below only sets state after its await. The two
-  // requests settle independently: a profile failure must not discard a plan
-  // that did load, and vice versa.
+  // Pure fetches, so the effect below only sets state after its await. The
+  // requests settle independently: a profile failure must not discard a plan or
+  // method list that did load, and vice versa.
   const fetchAll = useCallback(async () => {
-    const [loadedProfile, loadedPlan] = await Promise.allSettled([
+    const [loadedProfile, loadedPlan, loadedMethods] = await Promise.allSettled([
       fetchProfile(api),
-      bestEffort(fetchEntitlements(api))
+      bestEffort(fetchEntitlements(api)),
+      bestEffort(listAuthMethods(api))
     ]);
-    return { loadedProfile, loadedPlan };
+    return { loadedProfile, loadedPlan, loadedMethods };
   }, []);
 
-  const applyLoaded = useCallback(({ loadedProfile, loadedPlan }: Awaited<ReturnType<typeof fetchAll>>) => {
+  const applyLoaded = useCallback(({ loadedProfile, loadedPlan, loadedMethods }: Awaited<ReturnType<typeof fetchAll>>) => {
     if (loadedProfile.status === "fulfilled") {
       setProfile(loadedProfile.value);
       setProfileError(null);
@@ -61,6 +78,13 @@ export default function ProfileScreen() {
     } else {
       handleError(loadedPlan.reason);
       setPlanError(true);
+    }
+    if (loadedMethods.status === "fulfilled") {
+      setMethods(loadedMethods.value);
+      setMethodsError(loadedMethods.value ? null : "Couldn't load your sign-in methods.");
+    } else {
+      handleError(loadedMethods.reason);
+      setMethodsError("Couldn't load your sign-in methods.");
     }
     setLoading(false);
   }, [handleError]);
@@ -79,6 +103,7 @@ export default function ProfileScreen() {
   const retry = useCallback(() => {
     setLoading(true);
     setPlanError(false);
+    setMethodsError(null);
     void (async () => {
       applyLoaded(await fetchAll());
     })();
@@ -114,6 +139,44 @@ export default function ProfileScreen() {
     }
   }, [draftName, handleError]);
 
+  const unlink = useCallback(async (provider: string) => {
+    if (methodBusy) return;
+    setMethodBusy(provider);
+    setMethodsError(null);
+    setMethodsNotice(null);
+    try {
+      // The response is the whole remaining list, so the screen never guesses.
+      setMethods(await unlinkAuthMethod(api, provider));
+      setMethodsNotice(`${methodName(provider)} unlinked.`);
+    } catch (cause) {
+      handleError(cause);
+      setMethodsError(methodFailure(cause, "Couldn't unlink that method. Try again."));
+    } finally {
+      setMethodBusy(null);
+      setConfirming(null);
+    }
+  }, [handleError, methodBusy]);
+
+  const linkGoogle = useCallback(async () => {
+    if (linking) return;
+    setLinking(true);
+    setMethodsError(null);
+    setMethodsNotice(null);
+    try {
+      // The token is only passed to the server: never stored or logged here.
+      const idToken = await signInWithGoogle();
+      setMethods(await linkGoogleMethod(api, idToken));
+      setMethodsNotice("Google linked.");
+    } catch (cause) {
+      // Closing the Google sheet is a quiet no-op, as on sign-in.
+      if (isGoogleSignInCancelled(cause)) return;
+      handleError(cause);
+      setMethodsError(methodFailure(cause, "Couldn't link Google. Try again."));
+    } finally {
+      setLinking(false);
+    }
+  }, [handleError, linking]);
+
   const leave = useCallback(async () => {
     setSigningOut(true);
     try {
@@ -126,6 +189,7 @@ export default function ProfileScreen() {
   if (status === "signedOut") return <Redirect href="/sign-in" />;
 
   const name = displayName(profile);
+  const googleReady = googleSignInAvailable();
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right", "bottom"]}>
@@ -218,6 +282,73 @@ export default function ProfileScreen() {
           )}
         </Section>
 
+        <Section title="Sign-in methods" hint="These are the ways you can get into your account. Keep at least one so you can sign in again.">
+          {methodsNotice ? <Banner message={methodsNotice} tone="success" /> : null}
+          {methodsError && methods ? <Banner message={methodsError} tone="danger" /> : null}
+          {methods ? (
+            <>
+              {methods.map((method, index) => (
+                <View key={`${method.provider}-${index}`} style={styles.method}>
+                  <View style={styles.row}>
+                    <View style={styles.rowText}>
+                      <Text style={styles.methodName}>{methodName(method.provider)}</Text>
+                      <Text style={styles.hint}>{method.email ?? "No email on this method"}</Text>
+                      <Text style={styles.hint}>{methodAdded(method.addedAt)}</Text>
+                    </View>
+                    {confirming === method.provider ? null : (
+                      <Button
+                        label="Unlink"
+                        kind="secondary"
+                        disabled={!canUnlinkMethod(methods) || methodBusy !== null || linking}
+                        loading={methodBusy === method.provider}
+                        onPress={() => {
+                          setMethodsError(null);
+                          setMethodsNotice(null);
+                          setConfirming(method.provider);
+                        }}
+                      />
+                    )}
+                  </View>
+                  {confirming === method.provider ? (
+                    <View style={styles.form}>
+                      <Banner message={`Unlink ${methodName(method.provider)}? You can add it again later.`} tone="warning" />
+                      <View style={styles.formActions}>
+                        <Button
+                          label="Yes, unlink"
+                          kind="danger"
+                          loading={methodBusy === method.provider}
+                          onPress={() => { void unlink(method.provider); }}
+                        />
+                        <Button label="Cancel" kind="secondary" disabled={methodBusy !== null} onPress={() => setConfirming(null)} />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+              {methods.length === 0 ? <Text style={styles.body}>No sign-in method is linked yet.</Text> : null}
+              {googleReady && !methods.some(method => method.provider === "google") ? (
+                <Button
+                  label="Link Google"
+                  kind="secondary"
+                  loading={linking}
+                  disabled={methodBusy !== null}
+                  onPress={() => { void linkGoogle(); }}
+                />
+              ) : null}
+              {methods.length === 1 ? (
+                <Text style={styles.hint}>You can’t unlink your only method. Add another method first.</Text>
+              ) : null}
+            </>
+          ) : methodsError ? (
+            <View style={styles.form}>
+              <Banner message={methodsError} tone="danger" />
+              <Button label="Try again" kind="secondary" onPress={retry} />
+            </View>
+          ) : (
+            <ActivityIndicator />
+          )}
+        </Section>
+
         <Section title="Your plan" hint="Plans are changed on the web app.">
           {plan ? (
             <>
@@ -269,6 +400,8 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: 2 },
   rowLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: colors.faint },
   rowValue: { fontSize: 15, color: colors.ink },
+  method: { gap: 8, paddingVertical: 6 },
+  methodName: { fontSize: 15, fontWeight: "700", color: colors.ink },
   form: { gap: 10 },
   input: {
     minHeight: 48,

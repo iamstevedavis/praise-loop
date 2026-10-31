@@ -342,8 +342,9 @@ may still link an owner that has the same verified address but no Google row;
 a different Google subject on an already-linked address is rejected, as before
 (#116/#117). A provider whose email claim is not guaranteed verified (Microsoft
 later) creates a new owner instead of linking by email. A signed-in owner can
-link another method from `/account` or the phone API even when the emails
-differ, and the last method cannot be unlinked.
+link another method from `/account` or the phone profile even when the emails
+differ, and the last method cannot be unlinked. The phone links Google from the
+profile with a native ID token through the same route.
 
 The shared code is `lib/authLinking.ts`; `docs/auth.md` records the policy and
 `docs/decisions.md` records why. Migration 017 records the method's email and
@@ -424,6 +425,14 @@ draft from the queue and coming back still works.
   and after relaunch. The name rule is checked on the phone before the request
   (`mobile/src/profile/identity.ts`, mirroring `lib/services/profile.ts`) and the
   server's own 400 message is shown if it still rejects it.
+- **Sign-in methods**: the methods linked to the owner, each with its provider
+  name, email and added date (or "Added before we tracked method dates" for
+  rows without one). **Unlink** asks for confirmation in the screen first and is
+  disabled for the only method, with the same hint as the web page. **Link
+  Google** appears when the build supports Google and it is not linked yet;
+  the native ID token goes straight to `POST /api/account/methods` and is never
+  stored or logged. The server's own refusal is shown on failure and the list is
+  replaced from the response on success.
 - **Your plan**: the plan, its limits, this week's usage per business and the
   expiry note, moved here from the bottom of the queue. The queue keeps only the
   short "weekly limit reached" message that explains an empty week.
@@ -432,12 +441,14 @@ draft from the queue and coming back still works.
 - **Notifications**: a placeholder row; the toggle arrives with #89.
 - **Sign out**: revokes the session on the server, clears the stored token and
   returns to sign-in.
-- Profile and plan requests are best-effort. A failure shows a retry on the
-  profile screen and never blocks the queue, while a 401 goes through the
+- Profile, plan and method requests are best-effort. A failure shows a retry on
+  the profile screen and never blocks the queue, while a 401 goes through the
   session's `handleError` back to sign-in (see #137).
 - Covered by `mobile/__tests__/profile.test.ts` (initials, display name, the name
-  rule and the API wrapper's success, 400 and 401 cases) plus the client's
-  best-effort test. Manual checks on iOS and Android are recorded in the PR.
+  rule, method names, added dates and the unlink rule) and
+  `mobile/__tests__/methods.test.ts` (list, unlink and link, 400/409 messages and
+  401) plus the client's best-effort test. Manual checks on iOS and Android are
+  recorded in the PR.
 
 ## Phone approval queue and sharing (#86, #87)
 
