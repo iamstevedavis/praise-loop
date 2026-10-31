@@ -2,7 +2,14 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pool } from "../lib/db";
 
-async function run() {
+// The number only orders the files; the rest of the filename identifies the
+// migration. Renumbering a file that was already applied (the documented way
+// to resolve a collision with another PR) must not run its SQL a second time.
+function migrationName(file: string): string {
+  return file.replace(/^\d+_/, "").replace(/\.sql$/i, "");
+}
+
+export async function migrate() {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -19,19 +26,36 @@ async function run() {
       .filter((f) => f.endsWith(".sql"))
       .sort();
 
+    const applied = await client.query<{ name: string }>(
+      "SELECT name FROM schema_migrations"
+    );
+    const appliedNames = new Map(
+      applied.rows.map(({ name }) => [migrationName(name), name])
+    );
+
     for (const file of files) {
-      const exists = await client.query(
-        "SELECT 1 FROM schema_migrations WHERE name = $1 LIMIT 1",
-        [file]
-      );
-      if (exists.rowCount) {
-        console.log(`skip ${file}`);
+      const name = migrationName(file);
+      const previous = appliedNames.get(name);
+      if (previous) {
+        if (previous !== file) {
+          // Applied under an older number: record the new filename so future
+          // runs skip it, but do not run the SQL again.
+          await client.query(
+            "INSERT INTO schema_migrations(name) VALUES($1) ON CONFLICT (name) DO NOTHING",
+            [file]
+          );
+          appliedNames.set(name, file);
+          console.log(`skip ${file} (already applied as ${previous})`);
+        } else {
+          console.log(`skip ${file}`);
+        }
         continue;
       }
 
       const sql = readFileSync(join(dir, file), "utf8");
       await client.query(sql);
       await client.query("INSERT INTO schema_migrations(name) VALUES($1)", [file]);
+      appliedNames.set(name, file);
       console.log(`applied ${file}`);
     }
 
@@ -46,7 +70,9 @@ async function run() {
   }
 }
 
-run().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  migrate().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

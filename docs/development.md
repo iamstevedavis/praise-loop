@@ -203,6 +203,7 @@ closed with `email_unavailable`; the app still starts and serves other routes.
 ## Database migrations
 
 - `npm run db:migrate` — applies SQL files from `db/migrations` in filename order; applied files are recorded in `schema_migrations`
+- A migration is identified by the name after its number. Renumbering a file that was already applied (for example when rebasing past another PR) records the new filename and skips the SQL instead of running it twice, so never reuse that name for different SQL.
 - `npm run db:health` — connectivity check
 
 ## Tests, lint, typecheck, build
