@@ -85,6 +85,21 @@ export async function deleteOwnerAccount(
     await query("DELETE FROM google_connections WHERE owner_id=$1", [ownerId]);
     await query("DELETE FROM businesses WHERE owner_id=$1", [ownerId]);
     await query("DELETE FROM auth_users WHERE id=$1", [ownerId]);
+
+    // Rendered images are content-addressed, so another owner's draft or logo can point at the same
+    // file. Keep any file that is still referenced after this owner's rows are gone.
+    if (media.size) {
+      const paths = [...media].map(name => `/api/media/${name}`);
+      const stillUsed = await query<{ path: string }>(
+        `SELECT image_path AS path FROM draft_posts WHERE image_path = ANY($1::text[])
+         UNION SELECT logo_url AS path FROM businesses WHERE logo_url = ANY($1::text[])`,
+        [paths]
+      );
+      for (const row of stillUsed.rows) {
+        const name = mediaFilename(row.path);
+        if (name) media.delete(name);
+      }
+    }
     return [...media];
   });
 
