@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-10-31
+  Decision: Use `@react-native-google-signin/google-signin` 17 for native Google sign-in on the phone (#85)
+  Why: The app needs the device's Google account picker and an ID token to exchange at `POST /api/mobile/session`; a browser redirect would leave the app and cannot reuse the installed account on iOS. The library has an Expo config plugin that registers the iOS URL scheme at prebuild, and the client IDs are public values supplied through `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` and `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, never a secret. It includes native code, so Google sign-in works only in a development or store build, not Expo Go; the native module is required lazily so the app still starts in Expo Go with the Google button hidden, while demo and email sign-in keep working there. The ID token is sent once and never stored or logged; only our bearer session goes to the keychain.
+
 - Date: 2026-10-30
   Decision: Show initials instead of Google's profile picture on owner avatars (#149)
   Why: The profile API needs a stable fallback while Google does not always supply a name, and an avatar is not worth another network dependency or privacy surface now. Initials come from the name (or the email's local part) on the server, so both clients render the same thing without fetching anything. If a picture is added later, store it locally rather than hotlinking Google's URL, which can expire and leaks the owner's browsing to the image host.

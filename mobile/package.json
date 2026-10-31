@@ -13,6 +13,7 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@react-native-google-signin/google-signin": "^17.0.0",
     "expo": "~58.0.19",
     "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.13",

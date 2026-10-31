@@ -93,8 +93,13 @@ Owner steps to create the app's OAuth clients (Google Cloud Console, Google Auth
    Signing SHA-1 for store builds and add a separate client for the debug keystore if
    you test with one. Put the client ID(s) in `GOOGLE_ANDROID_CLIENT_ID`.
 3. Native Google Sign-In must produce an ID token whose audience is one of these client
-   IDs. If the Android library requests the token for the web client ID, add that ID to
-   `GOOGLE_ANDROID_CLIENT_ID`. Each variable accepts several comma-separated IDs.
+   IDs. The phone app sets `webClientId` from `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (the same
+   value as `GOOGLE_CLIENT_ID`) and `iosClientId` from `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`.
+   On Android the token's audience is therefore the web client ID: add that ID to
+   `GOOGLE_ANDROID_CLIENT_ID`. On iOS it is the iOS client ID already in
+   `GOOGLE_IOS_CLIENT_ID`. Each variable accepts several comma-separated IDs. The app's
+   reverse iOS scheme goes in `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` for prebuild only
+   (see `mobile/README.md`).
 
 ## Linking several sign-in methods to one owner (#156)
 

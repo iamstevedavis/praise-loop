@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useFocusEffect } from "expo-router";
+import * as Linking from "expo-linking";
 import { api } from "../api";
 import { ApiError, bestEffort } from "../api/client";
 import { listBusinesses, type Business } from "../api/businesses";
@@ -11,8 +12,10 @@ import { fetchProfile, type Profile } from "../api/profile";
 import { initials } from "../profile/identity";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
 import { expiryNote, quotaMetMessage, usageFor } from "../queue/planSummary";
+import { noBusinessView } from "../queue/onboarding";
 import { useSession } from "../auth/SessionProvider";
-import { Avatar, Banner, Chip, Section } from "../ui/components";
+import { appConfig } from "../config";
+import { Avatar, Banner, Button, Chip, Section } from "../ui/components";
 import { DraftImage } from "../ui/DraftImage";
 import { colors } from "../ui/theme";
 
@@ -100,7 +103,7 @@ export default function QueueScreen() {
   const applyBusinesses = useCallback((list: Business[]) => {
     setBusinesses(list);
     setBusinessId(current => current ?? list[0]?.id ?? null);
-    setError(list.length === 0 ? "No business yet. Set one up on the web app first." : null);
+    setError(null);
   }, []);
 
   useEffect(() => {
@@ -174,6 +177,14 @@ export default function QueueScreen() {
 
   if (status === "signedOut") return <Redirect href="/sign-in" />;
 
+  const noBusiness = noBusinessView(businesses, appConfig.apiBaseUrl);
+  const openOnboarding = () => {
+    if (!noBusiness?.onboardingUrl) return;
+    void Linking.openURL(noBusiness.onboardingUrl).catch(() => {
+      setError("Couldn’t open the web app on this phone.");
+    });
+  };
+
   const business = businesses?.find(item => item.id === businessId) ?? null;
   const loaded = queue && queue.businessId === businessId ? queue : null;
   const view = loaded ? buildQueue(loaded.drafts, loaded.generation) : null;
@@ -215,6 +226,22 @@ export default function QueueScreen() {
           </ScrollView>
         ) : null}
 
+        {noBusiness ? (
+          <View style={styles.noBusiness}>
+            <Text style={styles.headline}>{noBusiness.heading}</Text>
+            <Text style={styles.noBusinessBody}>{noBusiness.body}</Text>
+            {noBusiness.onboardingUrl ? (
+              <Button label="Set up on the web" onPress={openOnboarding} />
+            ) : null}
+            <Button
+              label="Check again"
+              kind="secondary"
+              loading={refreshing}
+              onPress={() => { void refresh(); }}
+            />
+          </View>
+        ) : null}
+
         {offline ? (
           <Banner
             message={loaded
@@ -225,7 +252,7 @@ export default function QueueScreen() {
         ) : null}
         {error && !offline ? <Banner message={error} tone="danger" /> : null}
 
-        {!loaded && !error && !offline ? <ActivityIndicator style={styles.loading} /> : null}
+        {!loaded && !noBusiness && !error && !offline ? <ActivityIndicator style={styles.loading} /> : null}
 
         {view ? (
           <>
@@ -303,6 +330,8 @@ const styles = StyleSheet.create({
   pickerText: { fontSize: 14, color: colors.ink },
   pickerTextSelected: { color: "#ffffff", fontWeight: "600" },
   loading: { marginTop: 24 },
+  noBusiness: { gap: 12, marginTop: 24 },
+  noBusinessBody: { fontSize: 16, lineHeight: 23, color: colors.muted },
   hero: { gap: 4, marginTop: 8 },
   headline: { fontSize: 22, lineHeight: 28, fontWeight: "700", color: colors.ink },
   progress: { fontSize: 14, color: colors.muted },
