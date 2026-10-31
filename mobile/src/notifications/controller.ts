@@ -54,12 +54,16 @@ function resolveDeps(deps: Partial<PushDeps>): PushDeps {
   return { ...defaultPushDeps, ...deps };
 }
 
-// Retries an unregister that failed earlier. Best effort: if it fails again the token stays pending.
+// Retries an unregister that failed earlier. The DELETE is owner-scoped, and the phone may now be
+// signed in as a different owner than the one that registered the token, so the token is first
+// registered to the current owner (the server's POST moves a token to its caller) and then removed.
+// Best effort: if it fails the token stays pending.
 export async function retryPendingUnregister(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
   const d = resolveDeps(deps);
   try {
     const pending = await d.loadPending();
     if (!pending) return;
+    await registerPushToken(client, pending, d.platform());
     await unregisterPushToken(client, pending);
     await d.clearPending();
   } catch {
@@ -76,9 +80,19 @@ async function unregisterOrKeepPending(client: PushApi, d: PushDeps, token: stri
   }
 }
 
+// Registration, the toggle and sign-out all touch the same server-side token, so they run one at a
+// time: a launch refresh that is still waiting for the Expo token must not POST after a later
+// "off" has already removed the device.
+let queue: Promise<unknown> = Promise.resolve();
+function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task, task);
+  queue = run.catch(() => undefined);
+  return run;
+}
+
 // Only an explicit "Turn on" reaches the OS prompt. A refusal is remembered so
 // the app does not ask again on every launch.
-export async function enableNotifications(client: PushApi, deps: Partial<PushDeps> = {}): Promise<EnableResult> {
+async function enableNotificationsNow(client: PushApi, deps: Partial<PushDeps> = {}): Promise<EnableResult> {
   const d = resolveDeps(deps);
   const availability = d.availability();
   if (!availability.available) return { status: "unavailable", reason: availability.reason };
@@ -99,9 +113,13 @@ export async function enableNotifications(client: PushApi, deps: Partial<PushDep
   }
 }
 
+export function enableNotifications(client: PushApi, deps: Partial<PushDeps> = {}): Promise<EnableResult> {
+  return serialized(() => enableNotificationsNow(client, deps));
+}
+
 // Launch refresh: sign in, notifications are on, so re-send the current token.
 // It never prompts; a revoked permission simply leaves the device unregistered.
-export async function refreshPushRegistration(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
+async function refreshPushRegistrationNow(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
   const d = resolveDeps(deps);
   await retryPendingUnregister(client, d);
   try {
@@ -116,8 +134,12 @@ export async function refreshPushRegistration(client: PushApi, deps: Partial<Pus
   }
 }
 
+export function refreshPushRegistration(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
+  return serialized(() => refreshPushRegistrationNow(client, deps));
+}
+
 // Turning the toggle off sticks even when the network or the OS call fails.
-export async function disableNotifications(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
+async function disableNotificationsNow(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
   const d = resolveDeps(deps);
   await d.saveChoice("off");
   try {
@@ -134,9 +156,13 @@ export async function disableNotifications(client: PushApi, deps: Partial<PushDe
   }
 }
 
+export function disableNotifications(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
+  return serialized(() => disableNotificationsNow(client, deps));
+}
+
 // Sign-out unregisters the device best-effort, like the session revoke. The
 // preference itself is kept so the next sign-in can register again.
-export async function unregisterPushDevice(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
+async function unregisterPushDeviceNow(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
   const d = resolveDeps(deps);
   await retryPendingUnregister(client, d);
   try {
@@ -154,4 +180,8 @@ export async function unregisterPushDevice(client: PushApi, deps: Partial<PushDe
   } finally {
     d.forgetToken();
   }
+}
+
+export function unregisterPushDevice(client: PushApi, deps: Partial<PushDeps> = {}): Promise<void> {
+  return serialized(() => unregisterPushDeviceNow(client, deps));
 }

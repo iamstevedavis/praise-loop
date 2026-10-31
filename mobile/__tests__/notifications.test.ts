@@ -251,6 +251,10 @@ describe("notification toggle and launch refresh", () => {
     const { client, request } = apiMock();
     const clearPending = jest.fn().mockResolvedValue(undefined);
     await refreshPushRegistration(client, deps({ loadChoice: async () => "off", loadPending: async () => TOKEN, clearPending }));
+    // Registered to the current owner first (the server moves the token to its caller), then removed,
+    // so the DELETE works even when a different owner is signed in now.
+    expect(request.mock.calls.map(call => `${call[1].method}`)).toEqual(["POST", "DELETE"]);
+    expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "POST", body: { token: TOKEN, platform: "ios" } });
     expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "DELETE", body: { token: TOKEN } });
     expect(clearPending).toHaveBeenCalledTimes(1);
   });
@@ -265,6 +269,21 @@ describe("notification toggle and launch refresh", () => {
     await unregisterPushDevice(client, deps({ loadChoice: async () => "off", loadPending: async () => TOKEN, clearPending }));
     expect(request).toHaveBeenCalledWith("/api/mobile/push-tokens", { method: "DELETE", body: { token: TOKEN } });
     expect(clearPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a slow launch refresh register the device after notifications were turned off", async () => {
+    const { client, request } = apiMock();
+    let release: (token: string) => void = () => undefined;
+    const slowToken = () => new Promise<string>(resolve => { release = resolve; });
+    const d = deps({ loadChoice: async () => "on", permission: async () => "granted", token: slowToken, cachedToken: () => TOKEN });
+
+    const refresh = refreshPushRegistration(client, d);
+    const disable = disableNotifications(client, d);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    release(TOKEN);
+    await Promise.all([refresh, disable]);
+
+    expect(request.mock.calls.map(call => call[1].method)).toEqual(["POST", "DELETE"]);
   });
 
   it("refreshes the token on launch only when notifications are on and permission is granted", async () => {
