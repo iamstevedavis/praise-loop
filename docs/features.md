@@ -439,6 +439,44 @@ draft from the queue and coming back still works.
   rule and the API wrapper's success, 400 and 401 cases) plus the client's
   best-effort test. Manual checks on iOS and Android are recorded in the PR.
 
+## Phone approval queue and sharing (#86, #87)
+
+The phone queue is the weekly approval flow: it lists this business's drafts,
+approved posts and owner-reported shared posts, keeps the last loaded queue
+read-only when offline, and shows generation progress from
+`GET /api/generation`. Opening a post shows the full image, caption, quote and
+rating. Every mutation sends that draft's `version`; a 409 reloads the screen
+and says the post changed somewhere else, like the web queue.
+
+- **Edit, approve, archive.** Saving a caption still needs the same 1–200
+  character rule as the web. Approving saves a pending caption first, so the
+  owner never approves the text that is about to be replaced.
+- **Make a new version.** Available for a finished draft or a failed generation.
+  A confirmation dialog says that PraiseLoop writes a fresh caption and image,
+  clears approval and uses one of the post's two new-version attempts.
+  `POST /api/generation/regenerate` is the existing `ownerRoute`, so the phone
+  uses the normal bearer session. Success returns to the queue, where the
+  cleared post appears as "being made" with the generation progress. A 409 for
+  a stale version or a generation that is still active reloads the post and
+  explains what happened; an exhausted retry budget, the daily limit and an
+  expired session each get their own plain-language message.
+- **Post.** On an approved post, **Post** downloads the owner-protected PNG into
+  the app cache, copies the caption and opens the system share sheet. The owner
+  is told to paste the caption because Instagram does not accept it from another
+  app, and the post is only marked `shared` after they answer "Did you post it?".
+- **Save to Photos.** Also on an approved post, **Save to Photos** downloads the
+  same PNG and adds it to the device library with `expo-media-library`. The
+  photo-library permission is requested only when the button is pressed, and
+  only for adding photos. A denied permission explains how to enable it in the
+  phone's settings; a failed download keeps the reason on screen; the cached
+  copy is deleted afterwards. The module is required lazily, so Expo Go and Jest
+  still start without it, and it is unavailable there rather than fatal.
+- Covered by `mobile/__tests__/queueState.test.ts`,
+  `mobile/__tests__/drafts.test.ts`, `mobile/__tests__/shareFlow.test.ts`,
+  `mobile/__tests__/regenerateFlow.test.ts` and
+  `mobile/__tests__/saveToPhotosFlow.test.ts`. Manual iOS and Android checks
+  with Instagram and Facebook installed are still recorded in the PR.
+
 ## Demo owner picker (#154)
 
 In a development process with `MOBILE_DEV_AUTH=1`, the phone sign-in screen and
