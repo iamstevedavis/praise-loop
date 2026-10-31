@@ -1,6 +1,14 @@
 import { createApiClient } from "../src/api/client";
 import { fetchProfile, NAME_MAX_LENGTH, saveName, type Profile } from "../src/api/profile";
-import { displayName, initials, nameActionLabel, nameProblem } from "../src/profile/identity";
+import {
+  canUnlinkMethod,
+  displayName,
+  initials,
+  methodAdded,
+  methodName,
+  nameActionLabel,
+  nameProblem
+} from "../src/profile/identity";
 
 function profileRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -97,5 +105,28 @@ describe("profile identity", () => {
     expect(nameProblem("   ")).toBe("Enter your name.");
     expect(nameProblem("Ada\nLovelace")).toBe("Remove control characters from your name.");
     expect(nameProblem("Ada\u007fLovelace")).toBe("Remove control characters from your name.");
+  });
+});
+
+describe("sign-in method display", () => {
+  const google = { provider: "google", email: "ada@example.invalid", addedAt: "2026-10-30T12:00:00.000Z", lastUsedAt: null };
+  const email = { provider: "email", email: "ada@example.invalid", addedAt: null, lastUsedAt: null };
+
+  it("names the providers the way the web page does", () => {
+    expect(methodName("google")).toBe("Google");
+    expect(methodName("email")).toBe("Email");
+    expect(methodName("microsoft")).toBe("microsoft");
+  });
+
+  it("shows the added date, or the old-data wording when there is none", () => {
+    expect(methodAdded(google.addedAt)).toBe("Added 2026-10-30");
+    expect(methodAdded(null)).toBe("Added before we tracked method dates");
+  });
+
+  it("only allows unlinking when another method remains", () => {
+    expect(canUnlinkMethod([google, email])).toBe(true);
+    expect(canUnlinkMethod([google])).toBe(false);
+    expect(canUnlinkMethod([])).toBe(false);
+    expect(canUnlinkMethod(null)).toBe(false);
   });
 });
