@@ -212,7 +212,16 @@ bearer session for the fixed `dev-owner` row, with no Google token. It exists on
 when `MOBILE_DEV_AUTH=1` **and** the process is not a production build; otherwise it
 returns 404 exactly like an unknown route. `npm run dev:seed` creates the owners and
 synthetic drafts; a body of `{"owner":"free"}` signs in as the seeded Free owner
-instead of the default Pro one. The demo owner has the same ownership checks, version conflicts and
+and `{"owner":"email"}` as the email-only owner, instead of the default Pro one.
+
+The web uses `POST /api/dev/session` with the same flag, production guard and
+`{"owner":"pro"|"free"|"email"}` body. It creates the normal `auth_sessions` row
+and NextAuth cookie for that demo owner, so `/approval`, the plan page and the
+Brand page work without Google. A cookie-minting request must come from the app's
+own origin. `GET /api/dev/session` lists the owner keys and labels for the
+landing-page buttons and also answers 404 when the flag is off. Only the known
+seed keys are accepted (400 otherwise), so neither route can sign in a real
+owner. The demo owner has the same ownership checks, version conflicts and
 audit events as a real owner, so the flow is realistic; never enable the flag on a
 shared server. Production sign-in remains the Google exchange above.
 

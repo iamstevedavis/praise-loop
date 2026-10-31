@@ -121,14 +121,24 @@ answers 404 for the demo sign-in even if the flag is set.
    EXPO_PUBLIC_API_BASE_URL=http://192.168.1.20:3000 npm start
    ```
 
-4. Tap **Sign in as demo owner** (the Pro owner), approve a post, then open the
+4. On the phone, tap the demo button for the owner you want: **Pro demo owner**
+   (Copper Kettle Café and Hespeler Powder Coating), **Free demo owner** (Harbour
+   Bike Repair, with the watermark and the Free plan limits) or **Email demo
+   owner** (no businesses; walks the email-only account). Each button creates a
+   normal bearer session for that seeded owner. Approve a post, then open the
    approved one and tap **Post** to open the share sheet. The caption is copied
    to the clipboard; answer “Did you post it?” to record `shared`.
 
-   The Free owner has no button. Get a bearer session for it with
-   `curl -X POST -H 'Content-Type: application/json' -d '{"owner":"free"}' http://localhost:3000/api/mobile/session/dev`
-   and send the returned token as `Authorization: Bearer <token>` to the API.
-   The same flag and production guard apply as for the Pro owner.
+5. On the web, open `http://localhost:3000` and use the same three buttons under
+   the sign-in options. They create the ordinary web session cookie for the
+   chosen owner and go to `/approval`, so This Week, Plan and Brand can be used
+   with the seeded data and no Google account. The buttons appear only when the
+   server reports dev sign-in enabled; otherwise the route answers 404 and the
+   page shows nothing.
+
+   The same flag and production guard apply to the phone and the web. The
+   bearer route is `POST /api/mobile/session/dev` and the cookie route is
+   `POST /api/dev/session`; both accept `{"owner":"pro"|"free"|"email"}`.
 
 Queue thumbnails and the draft screen's image are fetched like the share flow:
 the app downloads the owner-protected PNG with `expo-file-system` and the bearer
