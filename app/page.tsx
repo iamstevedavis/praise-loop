@@ -14,6 +14,8 @@ const steps = [
   ["3 · You approve", "Tweak a caption if you want. Approved posts go out on your schedule."]
 ];
 
+type DemoOwnerOption = { key: string; label: string };
+
 async function postJson(path: string, body: object) {
   const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const data = await response.json().catch(() => null) as { error?: unknown } | null;
@@ -41,6 +43,24 @@ export default function HomePage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // Development-only demo sign-in: the server answers 404 unless
+  // MOBILE_DEV_AUTH=1 in a non-production process, so production pages show
+  // nothing and carry no hint that the route exists.
+  const [demoOwners, setDemoOwners] = useState<DemoOwnerOption[]>([]);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [demoBusy, setDemoBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dev/session", { headers: { accept: "application/json" } })
+      .then(response => response.ok ? response.json() : null)
+      .then((data: { owners?: unknown } | null) => {
+        if (cancelled || !Array.isArray(data?.owners)) return;
+        setDemoOwners(data.owners.filter((owner): owner is DemoOwnerOption =>
+          !!owner && typeof owner === "object" && typeof (owner as DemoOwnerOption).key === "string" && typeof (owner as DemoOwnerOption).label === "string"));
+      })
+      .catch(() => { /* The normal sign-in options still work without it. */ });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setTimeout(() => setCooldown(value => value - 1), 1000);
@@ -87,6 +107,21 @@ export default function HomePage() {
 
   function restart() {
     setStage("email"); setCode(""); setEmailError(null); setEmailNotice(null); setCooldown(0);
+  }
+
+  async function signInDemo(owner: string) {
+    if (demoBusy) return;
+    setDemoBusy(true); setDemoError(null);
+    try {
+      const result = await postJson("/api/dev/session", { owner });
+      if (!result.ok) {
+        setDemoError(result.error ?? "Demo sign-in failed; try again.");
+        return;
+      }
+      window.location.assign(notice.callbackUrl ?? "/approval");
+    } catch {
+      setDemoError("Could not reach PraiseLoop; try again.");
+    } finally { setDemoBusy(false); }
   }
 
   return (
@@ -144,6 +179,19 @@ export default function HomePage() {
             )}
             <span className="pl-muted pl-small">Nothing posts without your OK.</span>
             <Link href="/plans" className="pl-small">See what each plan includes</Link>
+            {demoOwners.length > 0 ? (
+              <div className={styles.demo}>
+                <span className="pl-small pl-muted">Demo mode: sign in as a seeded synthetic owner.</span>
+                <div className={styles.emailLinks}>
+                  {demoOwners.map(owner => (
+                    <button key={owner.key} type="button" className="pl-btn" onClick={() => void signInDemo(owner.key)} disabled={demoBusy || status === "loading" || status === "ready"}>
+                      {owner.label}
+                    </button>
+                  ))}
+                </div>
+                {demoError ? <p role="alert" className="pl-small" style={{ color: "#A3361F" }}>{demoError}</p> : null}
+              </div>
+            ) : null}
           </div>
         </section>
         <div className={styles.sample} role="img" aria-label="Example quote card: The sourdough is unreal and they remember my order every single time. — Priya S.">

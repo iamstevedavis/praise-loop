@@ -5,6 +5,7 @@ import { api } from "../api";
 import { ApiError } from "../api/client";
 import { fetchMobileConfig, type MobileConfig } from "../api/config";
 import { useSession } from "../auth/SessionProvider";
+import { DEMO_OWNERS, type DemoOwnerKey } from "../auth/demoOwners";
 import { appConfig } from "../config";
 import { Banner, Button } from "../ui/components";
 import { colors } from "../ui/theme";
@@ -35,11 +36,11 @@ export default function SignInScreen() {
     return () => clearTimeout(timer);
   }, [cooldown]);
 
-  const demo = useCallback(async () => {
+  const demo = useCallback(async (owner: DemoOwnerKey) => {
     setBusy(true);
     setError(null);
     try {
-      await signInDemo();
+      await signInDemo(owner);
       router.replace("/queue");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Demo sign-in failed.");
@@ -161,7 +162,9 @@ export default function SignInScreen() {
       {config?.devAuth ? (
         <View style={styles.actions}>
           <Banner message="Demo mode: this server signs in a synthetic owner with seeded posts. No Google account is involved." tone="warning" />
-          <Button label="Sign in as demo owner" onPress={() => { void demo(); }} loading={busy} kind="secondary" />
+          {DEMO_OWNERS.map(owner => (
+            <Button key={owner.key} label={owner.label} onPress={() => { void demo(owner.key); }} loading={busy} kind="secondary" />
+          ))}
         </View>
       ) : null}
 

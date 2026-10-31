@@ -8,6 +8,8 @@
 .email { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 380px; padding: 16px; border: 1px solid var(--pl-line); border-radius: 14px; background: var(--pl-surface); }
 .email p { margin: 0; }
 .emailLinks { display: flex; flex-wrap: wrap; gap: 6px; }
+.demo { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 380px; padding: 16px; border: 1px solid var(--pl-line); border-radius: 14px; background: var(--pl-surface); }
+.demo p { margin: 0; }
 .sample { flex: 0 1 380px; aspect-ratio: 1 / 1; padding: 34px; border-radius: 22px; background: #5B2A44; color: #FFFFFF; display: flex; flex-direction: column; justify-content: space-between; transform: rotate(-2deg); box-shadow: 0 24px 60px rgba(23, 32, 28, 0.18); }
 .stars { color: var(--pl-marigold); font-size: 24px; letter-spacing: 2px; }
 .quote { margin: 0; font-family: var(--pl-display); font-size: clamp(22px, 2.6vw, 30px); line-height: 1.2; font-weight: 600; }

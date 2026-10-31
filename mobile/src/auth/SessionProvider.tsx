@@ -3,6 +3,7 @@ import { isSignedOut } from "../api/client";
 import { draftImageLoader } from "../media/draftImage";
 import { sessionStore } from "./store";
 import { signInDemo as requestDemoSession, signInWithEmail, signOut as revokeSession } from "./session";
+import type { DemoOwnerKey } from "./demoOwners";
 
 type SessionStatus = "loading" | "signedOut" | "signedIn";
 
@@ -12,7 +13,7 @@ type SessionValue = {
   // True after the server ended the session (as opposed to the owner signing out),
   // so the sign-in screen can say why.
   sessionEnded: boolean;
-  signInDemo: () => Promise<void>;
+  signInDemo: (owner: DemoOwnerKey) => Promise<void>;
   signInEmail: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
   // Call from a screen's catch: a 401 clears the keychain and returns the app to
@@ -48,8 +49,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signInDemo = useCallback(async () => {
-    await requestDemoSession();
+  const signInDemo = useCallback(async (owner: DemoOwnerKey) => {
+    await requestDemoSession(owner);
     setToken(sessionStore.current());
     setSessionEnded(false);
     setStatus("signedIn");

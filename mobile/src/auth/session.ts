@@ -1,11 +1,12 @@
 import { api } from "../api";
 import { sessionStore } from "./store";
 import { signInWithEmailCode } from "./email";
+import type { DemoOwnerKey } from "./demoOwners";
 
 // Demo sign-in. The route only exists on a development server started with
 // MOBILE_DEV_AUTH=1; production and every other build answer 404.
-export async function signInDemo(): Promise<void> {
-  const session = await api.request<{ token?: unknown }>("/api/mobile/session/dev", { method: "POST" });
+export async function signInDemo(owner: DemoOwnerKey): Promise<void> {
+  const session = await api.request<{ token?: unknown }>("/api/mobile/session/dev", { method: "POST", body: { owner } });
   if (typeof session?.token !== "string" || session.token.length === 0) {
     throw new Error("The demo sign-in response was invalid.");
   }

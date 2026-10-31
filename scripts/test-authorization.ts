@@ -12,10 +12,10 @@ function files(dir: string): string[] { return readdirSync(dir, { withFileTypes:
 async function main() {
   process.env.NEXTAUTH_URL = "http://localhost";
   // Exercise every actual API export anonymously, including future additions (fail closed).
-  // The mobile config route is public by design (#82); the demo sign-in route answers 404
-  // unless a development process enables it, so it is checked separately below.
+  // The mobile config route is public by design (#82); the demo sign-in routes answer 404
+  // unless a development process enables them, so they are checked separately below.
   // Email sign-in is public by design (#157) and rate-limits instead of requiring a session.
-  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/dev/route.ts", "app/api/mobile/session/email/route.ts"]);
+  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/dev/route.ts", "app/api/mobile/session/email/route.ts", "app/api/dev/session/route.ts"]);
   for (const file of files("app/api").filter(f => !f.includes("/auth/") && !publicRoutes.has(f))) {
     const route = require(join("..",file));
     const path = "/" + file.replace(/\/route.ts$/, "").replace("[id]", "999999").replace("[name]", "draft-999999.png");
@@ -32,6 +32,9 @@ async function main() {
   // Demo sign-in stays hidden unless a development process opts in.
   const devRoute = require("../app/api/mobile/session/dev/route");
   assert.equal((await devRoute.POST()).status, 404, "demo sign-in must be missing without MOBILE_DEV_AUTH");
+  const devWebRoute = require("../app/api/dev/session/route");
+  assert.equal((await devWebRoute.GET()).status, 404, "web demo sign-in must be missing without MOBILE_DEV_AUTH");
+  assert.equal((await devWebRoute.POST(new NextRequest("http://localhost/api/dev/session", { method: "POST", body: JSON.stringify({ owner: "pro" }) }))).status, 404, "web demo session cannot be minted without MOBILE_DEV_AUTH");
   process.env.MOBILE_MINIMUM_VERSION = "1.2.0";
   process.env.MOBILE_LATEST_VERSION = "1.4.0";
   process.env.MOBILE_FEATURES = "queue, sharing, Not Valid,queue,";

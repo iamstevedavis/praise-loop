@@ -20,6 +20,15 @@ export const DEV_OWNERS = {
 } as const;
 export type DevOwnerKey = keyof typeof DEV_OWNERS;
 
+// Labels for the demo-owner buttons on the web. The phone keeps its own copy in
+// mobile/src/auth/demoOwners.ts because it is a separate package.
+export const DEV_OWNER_LABELS: Record<DevOwnerKey, string> = {
+  pro: "Pro demo owner",
+  free: "Free demo owner",
+  email: "Email demo owner"
+};
+export const DEV_OWNER_OPTIONS = (Object.keys(DEV_OWNERS) as DevOwnerKey[]).map(key => ({ key, label: DEV_OWNER_LABELS[key] }));
+
 export function devAuthEnabled(env: Record<string, string | undefined> = process.env): boolean {
   return env.MOBILE_DEV_AUTH === "1" && env.NODE_ENV !== "production";
 }

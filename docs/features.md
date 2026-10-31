@@ -417,3 +417,27 @@ draft from the queue and coming back still works.
 - Covered by `mobile/__tests__/profile.test.ts` (initials, display name, the name
   rule and the API wrapper's success, 400 and 401 cases) plus the client's
   best-effort test. Manual checks on iOS and Android are recorded in the PR.
+
+## Demo owner picker (#154)
+
+In a development process with `MOBILE_DEV_AUTH=1`, the phone sign-in screen and
+the web landing page each offer one button per seeded synthetic owner: **Pro
+demo owner**, **Free demo owner** and **Email demo owner**. The Free owner walks
+the watermark, weekly limit and plan page; the email-only owner walks the
+account with no businesses (`npm run dev:seed` creates all three).
+
+- The phone still uses `POST /api/mobile/session/dev` with
+  `{"owner":"pro"|"free"|"email"}` and a bearer token.
+- The web uses `POST /api/dev/session` with the same body. It creates the normal
+  hashed `auth_sessions` row and NextAuth cookie, so the whole web app works
+  without Google. `GET /api/dev/session` supplies the button labels; it and the
+  POST answer 404 when the flag is off, and the POST also requires the app's own
+  Origin.
+- Unknown owner keys are 400; only the seeded demo rows are reachable, never a
+  real owner. Production builds answer 404 even with the flag set.
+- Verify with `TEST_DATABASE_URL=... npx ts-node scripts/test-dev-auth.ts`
+  (gates, unknown key, a working web cookie that reads `/api/profile`) and
+  `npx ts-node scripts/test-authorization.ts` without `MOBILE_DEV_AUTH`. The
+  phone's list is covered by `mobile/__tests__/demoOwners.test.ts`.
+- Rollback: remove the buttons and routes; the demo owners are ordinary
+  `auth_users` rows, so no data migration is involved.
