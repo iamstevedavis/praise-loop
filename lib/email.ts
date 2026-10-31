@@ -19,6 +19,7 @@ export type EmailErrorCode =
   | "email_invalid"
   | "email_throttled"
   | "email_auth"
+  | "email_sender"
   | "email_provider"
   | "email_timeout";
 
@@ -181,8 +182,13 @@ export function resendTransport(options: ResendOptions): EmailTransport {
         throw new EmailError("email_provider", "email_provider: the email provider could not be reached");
       }
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
+        if (response.status === 401) {
           throw new EmailError("email_auth", "email_auth: the email provider rejected the API key");
+        }
+        // Resend answers 403 when the key is valid but the sender is refused,
+        // for example an unverified EMAIL_FROM domain or a send-restricted key.
+        if (response.status === 403) {
+          throw new EmailError("email_sender", "email_sender: the email provider refused the sender; check that the EMAIL_FROM domain is verified");
         }
         if (response.status === 429) {
           throw new EmailError("email_throttled", "email_throttled: the email provider rate limited the request", retryAfterMs(response.headers.get("retry-after")));

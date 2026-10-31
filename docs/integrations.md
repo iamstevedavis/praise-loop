@@ -61,8 +61,11 @@ Fetched 2026-10-30:
   and is refused in a production process.
 - `resend`: a timeout-bounded `fetch` call. It sends `text` only (no HTML, images,
   tracking pixels or review content), never logs the API key, message body or
-  recipient, and maps errors to sanitized codes (`email_auth`, `email_invalid`,
-  `email_throttled`, `email_provider`, `email_timeout`). A missing `EMAIL_FROM` or
+  recipient, and maps errors to sanitized codes (`email_auth`, `email_sender`,
+  `email_invalid`, `email_throttled`, `email_provider`, `email_timeout`). A 401
+  from Resend is `email_auth` (missing or invalid key); a 403 is `email_sender`
+  (valid key, refused sender: usually an unverified `EMAIL_FROM` domain or a
+  send-restricted key). A missing `EMAIL_FROM` or
   `RESEND_API_KEY` fails closed with `email_unavailable` and a clear message.
 
 `sendEmail()` throttles per recipient (5/hour) and per sender (100/hour) with a
