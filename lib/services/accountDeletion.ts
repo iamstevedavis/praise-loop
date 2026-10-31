@@ -1,0 +1,99 @@
+import { rm } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
+import { query, transaction } from "../db";
+import { mediaRoot } from "./media";
+
+export const DELETE_CONFIRMATION = "DELETE";
+
+// Draft images and any logo stored through the media route use this shape.
+// Requiring one plain filename also rejects path traversal before the disk.
+const MEDIA_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/;
+
+export function mediaFilename(path: string | null | undefined): string | null {
+  if (!path || !path.startsWith("/api/media/")) return null;
+  const name = path.slice("/api/media/".length);
+  return MEDIA_NAME.test(name) ? name : null;
+}
+
+function mediaPath(name: string, root = mediaRoot()): string | null {
+  if (!MEDIA_NAME.test(name)) return null;
+  const file = resolve(join(root, name));
+  return file.startsWith(root + sep) ? file : null;
+}
+
+// Safe to retry: a missing file is fine, and one unremovable file neither stops
+// the rest nor fails the request whose rows are already gone. Only a count is
+// logged, never a path that could name another owner's data.
+export async function removeMediaFiles(
+  names: string[],
+  remove: (file: string) => Promise<void> = file => rm(file, { force: true })
+): Promise<void> {
+  let failed = 0;
+  for (const name of names) {
+    const file = mediaPath(name);
+    if (!file) continue;
+    try {
+      await remove(file);
+    } catch {
+      failed += 1;
+    }
+  }
+  if (failed) console.error("account_deletion_media_cleanup_failed", { files: failed });
+}
+
+// Everything the owner owns goes in one transaction, so a failure leaves the
+// account intact. Existing ON DELETE CASCADE covers reviews, drafts, events,
+// jobs, periods, slot claims, push deliveries and the auth tables; only the
+// owner row and explicit owner-column rows need deleting here. The media files
+// are removed after the commit by the caller.
+export async function deleteOwnerAccount(
+  ownerId: string,
+  remove: (names: string[]) => Promise<void> = removeMediaFiles
+): Promise<{ mediaFiles: number }> {
+  const names = await transaction(async () => {
+    const locked = await query("SELECT 1 FROM auth_users WHERE id=$1 FOR UPDATE", [ownerId]);
+    if (!locked.rowCount) throw new Error("Owner not found");
+
+    // Codes are keyed by address, not owner, so collect both the login address
+    // and any snapshot on a linked method before the auth rows disappear.
+    const addresses = (await query<{ email: string }>(
+      `SELECT email FROM auth_users WHERE id=$1 AND email IS NOT NULL
+       UNION
+       SELECT email FROM auth_accounts WHERE owner_id=$1 AND email IS NOT NULL`,
+      [ownerId]
+    )).rows.map(row => row.email.trim().toLowerCase()).filter(Boolean);
+
+    const media = new Set<string>();
+    const drafts = await query<{ image_path: string | null }>(
+      `SELECT d.image_path FROM draft_posts d JOIN businesses b ON b.id=d.business_id WHERE b.owner_id=$1`,
+      [ownerId]
+    );
+    for (const row of drafts.rows) {
+      const name = mediaFilename(row.image_path);
+      if (name) media.add(name);
+    }
+    const logos = await query<{ logo_url: string | null }>("SELECT logo_url FROM businesses WHERE owner_id=$1", [ownerId]);
+    for (const row of logos.rows) {
+      const name = mediaFilename(row.logo_url);
+      if (name) media.add(name);
+    }
+
+    if (addresses.length) {
+      await query("DELETE FROM email_sign_in_codes WHERE lower(email) = ANY($1::text[])", [addresses]);
+    }
+    // Explicit for both an owner-column row without a business and its cascade.
+    await query("DELETE FROM google_connections WHERE owner_id=$1", [ownerId]);
+    await query("DELETE FROM businesses WHERE owner_id=$1", [ownerId]);
+    await query("DELETE FROM auth_users WHERE id=$1", [ownerId]);
+    return [...media];
+  });
+
+  // Data is committed: cleanup issues are logged and can be retried, never
+  // turned into an error that suggests the account still exists.
+  try {
+    await remove(names);
+  } catch {
+    console.error("account_deletion_media_cleanup_failed", { files: names.length });
+  }
+  return { mediaFiles: names.length };
+}

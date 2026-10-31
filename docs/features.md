@@ -488,6 +488,31 @@ and says the post changed somewhere else, like the web queue.
   `mobile/__tests__/saveToPhotosFlow.test.ts`. Manual iOS and Android checks
   with Instagram and Facebook installed are still recorded in the PR.
 
+## Delete account (#93)
+
+An owner can delete their account from the web profile page (`/account`) or the
+phone profile screen. Both show what is removed, state that an App Store or
+Google Play subscription is not cancelled and where to cancel it, and require
+typing `DELETE` before the button works.
+
+- `DELETE /api/account` takes `{"confirm": "DELETE"}` and is owner-wide, so the
+  phone's bearer session works as well as the web cookie. Anything else is a
+  `400` with no changes. The session cookie is cleared on a successful cookie
+  request.
+- The deletion, cascade list, media cleanup and the "nothing is kept today"
+  policy are documented in [auth.md](auth.md#deleting-an-account-93). There is no
+  soft delete or recovery period.
+- After success the web page signs out and returns to `/`; the phone clears the
+  keychain token and returns to sign-in. The server already deleted the session,
+  so the phone's normal sign-out treats the revoke call as best-effort.
+- Confirmation, wording and error handling are `mobile/src/profile/accountDeletion.ts`
+  with `mobile/__tests__/accountDeletion.test.ts`; the API call is
+  `mobile/src/api/account.ts`. `scripts/test-account-deletion.ts` runs against a
+  disposable database (owner A deleted, owner B untouched, media and sessions
+  checked) and is in the `npm test` chain.
+- Rollback: no schema change is involved. Restoring a deleted account is not
+  possible; stop deploying the route to disable the feature.
+
 ## Demo owner picker (#154)
 
 In a development process with `MOBILE_DEV_AUTH=1`, the phone sign-in screen and

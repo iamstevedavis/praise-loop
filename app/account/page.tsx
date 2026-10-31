@@ -2,7 +2,7 @@
 import { useBusiness, useProfile } from "../AppShell";
 import { apiFetch } from "../apiFetch";
 import ProfileNameForm from "../ProfileNameForm";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import { ADD_NAME_HINT, ADD_NAME_PROMPT, displayName } from "../../lib/profileDisplay";
 import { expiryNote, formatLocalDate, planName, quotaMetMessage } from "../../lib/planDisplay";
@@ -28,6 +28,9 @@ export default function AccountPage() {
   const [methodError, setMethodError] = useState<string | null>(null);
   const [methodNotice, setMethodNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadMethods = useCallback(async () => {
     try {
@@ -65,6 +68,31 @@ export default function AccountPage() {
       setMethodError("We couldn’t unlink that method.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function deleteAccount() {
+    if (confirmDelete !== "DELETE" || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const response = await apiFetch("/api/account", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" })
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        setDeleteError(data?.error ?? "We couldn’t delete your account. Try again.");
+        setDeleting(false);
+        return;
+      }
+      // The server already removed the session; this only clears the browser copy.
+      try { await signOut({ redirect: false }); } catch { /* the redirect below still leaves signed out */ }
+      window.location.assign("/");
+    } catch {
+      setDeleteError("We couldn’t delete your account. Check your connection and try again.");
+      setDeleting(false);
     }
   }
 
@@ -173,6 +201,42 @@ export default function AccountPage() {
           <div><button type="button" className="pl-btn" onClick={() => void signIn("google", { callbackUrl: "/account?linked=google" })}>Link Google</button></div>
         ) : null}
         {methods?.length === 1 ? <p className="pl-small pl-muted" style={{ margin: 0 }}>You can’t unlink your only method. Add another method first.</p> : null}
+      </section>
+
+      <section aria-labelledby="delete-h" className="pl-panel" style={{ borderColor: "#E7C4BB", display: "flex", flexDirection: "column", gap: 12 }}>
+        <h2 id="delete-h" className="pl-h2" style={{ color: "#A3361F" }}>Delete account</h2>
+        <p style={{ margin: 0 }}>
+          This permanently deletes your account and everything in it: your businesses, reviews, posts,
+          drafts, images, sign-in methods and sessions. There is no recovery period, and deleted data
+          cannot be restored.
+        </p>
+        <p className="pl-small pl-muted" style={{ margin: 0 }}>
+          Deleting your account does not cancel an App Store or Google Play subscription. Cancel it in
+          the App Store (Apple ID → Subscriptions) or Google Play (Payments &amp; subscriptions →
+          Subscriptions) first, otherwise the store may keep charging you.
+        </p>
+        <label htmlFor="delete-confirm" style={{ fontWeight: 600 }}>Type DELETE to confirm</label>
+        <input
+          id="delete-confirm"
+          className="pl-input"
+          value={confirmDelete}
+          onChange={event => { setConfirmDelete(event.target.value); setDeleteError(null); }}
+          autoComplete="off"
+          spellCheck={false}
+          disabled={deleting}
+          style={{ maxWidth: 280 }}
+        />
+        {deleteError ? <p role="alert" className="pl-small" style={{ margin: 0, color: "#A3361F", fontWeight: 600 }}>{deleteError}</p> : null}
+        <div>
+          <button
+            type="button"
+            className="pl-btn pl-btn-danger"
+            disabled={confirmDelete !== "DELETE" || deleting}
+            onClick={() => void deleteAccount()}
+          >
+            {deleting ? "Deleting…" : "Delete account"}
+          </button>
+        </div>
       </section>
     </>
   );
