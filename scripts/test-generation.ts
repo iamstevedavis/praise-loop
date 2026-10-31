@@ -3,7 +3,10 @@ import { NextRequest } from "next/server";
 import { sessionHash } from "../lib/auth-adapter";
 import assert from "node:assert/strict";
 import { databaseFixture } from "./db-fixture";
-import { generationWeek, requestGeneration, processGeneration, retryGeneration, type GenerationDeps } from "../lib/services/generation";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { discardOrphanRender, generationWeek, requestGeneration, processGeneration, retryGeneration, type GenerationDeps } from "../lib/services/generation";
 async function main() {
   assert.equal(generationWeek(new Date("2026-10-19T03:59:00Z"),"America/New_York"),"2026-10-12");
   assert.equal(generationWeek(new Date("2026-10-19T04:00:00Z"),"America/New_York"),"2026-10-19");
@@ -33,6 +36,12 @@ async function main() {
     assert.equal(await processGeneration(first,deps),true); assert.equal(captions,2,"persisted caption is not generated again after restart");
     assert.equal(renders,2); assert.equal(await processGeneration(first,deps),false);
     assert.equal((await client.query("SELECT status FROM draft_posts WHERE id=$1",[jobs[0].draft_id])).rows[0].status,"draft","human approval still required");
+    // A render finished after its draft was deleted (account deletion) is removed; one whose draft exists is kept.
+    const renderDir = mkdtempSync(join(tmpdir(),"orphan-render-")), orphan = join(renderDir,"orphan.png"), kept = join(renderDir,"kept.png");
+    writeFileSync(orphan,"x"); writeFileSync(kept,"x");
+    assert.equal(await discardOrphanRender(2147483000,orphan),true); assert.equal(existsSync(orphan),false);
+    assert.equal(await discardOrphanRender(Number(jobs[0].draft_id),kept),false); assert.equal(existsSync(kept),true);
+    rmSync(renderDir,{recursive:true,force:true});
     const second = Number(jobs[1].id);
     await client.query("UPDATE generation_jobs SET state='running',attempts=1,lease='dead-process',lease_until=$2 WHERE id=$1",[second,new Date(now.getTime()-1000)]);
     await client.query("UPDATE draft_posts SET caption_text='Persisted before crash' WHERE id=$1",[jobs[1].draft_id]);
